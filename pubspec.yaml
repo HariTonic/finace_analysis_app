@@ -1,0 +1,25 @@
+name: finance_management_app
+description: A finance management app using Flutter and Hive.
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  path_provider: ^2.1.3
+  intl: ^0.19.0
+  cupertino_icons: ^1.0.2
+  file_picker: ^5.2.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.8
+
+flutter:
+  uses-material-design: true
