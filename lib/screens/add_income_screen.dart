@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../models/transaction.dart';
 import '../utils/app_settings.dart';
+import '../utils/backup_sync_service.dart';
 import '../widgets/running_text.dart';
 
 class AddIncomeScreen extends StatefulWidget {
@@ -15,7 +16,7 @@ class AddIncomeScreen extends StatefulWidget {
 }
 
 class _AddIncomeScreenState extends State<AddIncomeScreen> {
-  final TextEditingController _amountController = TextEditingController(text: '0');
+  final TextEditingController _amountController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
 
   String _category = 'Salary';
@@ -46,7 +47,7 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
     final currencySymbol = AppSettings.currencySymbol(activeCurrency);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: const Color(0xFF0D1124),
       body: SafeArea(
         child: Column(
           children: [
@@ -103,20 +104,6 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
             ),
           ),
         ),
-        Text(
-          'AUTO-SAVE',
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.55),
-              fontSize: 11,
-              letterSpacing: 2.0,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(width: 10),
-        const CircleAvatar(
-          radius: 6,
-          backgroundColor: Color(0xFF78E06E),
-        ),
       ],
     );
   }
@@ -145,7 +132,7 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
                 child: Text(
                   currencySymbol,
                   style: const TextStyle(
-                    color: Color(0xFF8FD8A6),
+                    color: Color(0xFF4ADE80),
                     fontSize: 38,
                     fontWeight: FontWeight.w500,
                   ),
@@ -167,9 +154,16 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
                       fontWeight: FontWeight.w700,
                       height: 1,
                     ),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       border: InputBorder.none,
                       isCollapsed: true,
+                      hintText: '0',
+                      hintStyle: TextStyle(
+                        color: const Color(0xFF474747).withValues(alpha: 0.22),
+                        fontSize: 62,
+                        fontWeight: FontWeight.w700,
+                        height: 1,
+                      ),
                     ),
                   ),
                 ),
@@ -195,7 +189,7 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
 
   Widget _buildCategorySelector() {
     return SizedBox(
-      height: 146,
+      height: 164,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: _categories.length,
@@ -209,9 +203,9 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               width: 124,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
               decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF1E7D4B) : const Color(0xFF2D2D2D),
+                color: isSelected ? const Color(0xFF4ADE80) : const Color(0xFF161626),
                 borderRadius: BorderRadius.circular(24),
               ),
               child: Column(
@@ -227,15 +221,18 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
                     child: Icon(category.icon, color: Colors.white, size: 26),
                   ),
                   const SizedBox(height: 12),
-                  SizedBox(
-                    height: 34,
-                    child: RunningText(
-                      category.label,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: isSelected ? 1 : 0.78),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        category.label,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: isSelected ? Colors.black : Colors.white.withValues(alpha: 0.78),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ),
@@ -255,7 +252,7 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
         decoration: BoxDecoration(
-          color: const Color(0xFF1E1E1E),
+          color: const Color(0xFF1B1B2E),
           borderRadius: BorderRadius.circular(22),
         ),
         child: Row(
@@ -295,7 +292,7 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E),
+        color: const Color(0xFF1B1B2E),
         borderRadius: BorderRadius.circular(22),
       ),
       child: Column(
@@ -348,9 +345,9 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color(0xFF0A0E0C),
-            Color(0xFF142019),
-            Color(0xFF0A0D0B),
+            Color(0xFF0D1124),
+            Color(0xFF1B1B2E),
+            Color(0xFF0D1124),
           ],
         ),
       ),
@@ -418,7 +415,7 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
               bottom: 18,
               child: Row(
                 children: [
-                  const Icon(Icons.shield_rounded, color: Color(0xFF84EA77), size: 18),
+                  const Icon(Icons.shield_rounded, color: Color(0xFF4ADE80), size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: RunningText(
@@ -446,9 +443,9 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
       child: ElevatedButton(
         onPressed: _canSave ? _saveIncome : null,
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFB7F0C3),
+          backgroundColor: const Color(0xFF4ADE80),
           disabledBackgroundColor: const Color(0xFF5C5C68),
-          foregroundColor: const Color(0xFF155B37),
+          foregroundColor: Colors.black,
           disabledForegroundColor: Colors.white54,
           elevation: 0,
           shape: RoundedRectangleBorder(
@@ -478,10 +475,10 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
       width: 50,
       height: 50,
       decoration: BoxDecoration(
-        color: const Color(0xFF3A3A3A),
+        color: const Color(0xFF2A2A3F),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Icon(icon, color: const Color(0xFFC8F4D1), size: 24),
+      child: Icon(icon, color: const Color(0xFF4ADE80), size: 24),
     );
   }
 
@@ -539,6 +536,7 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
     );
 
     await Hive.box<Transaction>('transactions').add(transaction);
+    await BackupSyncService.instance.backupIfEnabled();
 
     if (!mounted) {
       return;

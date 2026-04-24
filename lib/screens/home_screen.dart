@@ -137,10 +137,34 @@ class HomeScreen extends StatelessWidget {
                   children: [
                     const Text('DAILY TRACKER', style: TextStyle(color: Colors.blueAccent, letterSpacing: 1.8, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 16),
-                    Text(
-                      pendingDays <= 0 ? 'You’re all caught up for today' : 'You haven’t entered today’s expense',
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
-                    ),
+                    if (pendingDays <= 0)
+                      const Text(
+                        "You're all caught up for today",
+                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+                      )
+                    else
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.warning_rounded, color: Colors.orangeAccent, size: 24),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'No entry for today! Update now.',
+                                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orangeAccent),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '$pendingDays day${pendingDays == 1 ? '' : 's'} pending',
+                            style: const TextStyle(fontSize: 14, color: Colors.grey),
+                          ),
+                        ],
+                      ),
                     const SizedBox(height: 24),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
@@ -168,13 +192,7 @@ class HomeScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: const [
-                  Text('Recent Transactions', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  Text('VIEW HISTORY', style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.w600)),
-                ],
-              ),
+              const Text('Recent Transactions', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
               if (recentTransactions.isEmpty)
                 Container(
@@ -185,8 +203,26 @@ class HomeScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Text('No recent transactions yet.', style: TextStyle(color: Colors.grey)),
+                ) else
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF161626),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: LimitedBox(
+                    maxHeight: 400,
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      physics: recentTransactions.length > 5 ? const AlwaysScrollableScrollPhysics() : const NeverScrollableScrollPhysics(),
+                      itemCount: recentTransactions.length,
+                      separatorBuilder: (context, index) => const Divider(
+                        height: 1,
+                        color: Color(0xFF2A2A3F),
+                      ),
+                      itemBuilder: (context, index) => _buildTransactionTile(recentTransactions[index]),
+                    ),
+                  ),
                 ),
-              ...recentTransactions.map((transaction) => _buildTransactionTile(transaction)).toList(),
               const SizedBox(height: 24),
               Container(
                 width: double.infinity,
@@ -293,13 +329,16 @@ class HomeScreen extends StatelessWidget {
 
   Widget _buildTransactionTile(Transaction transaction) {
     final activeCurrency = AppSettings.getCurrency();
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF161626),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+    
+    // Parse category to extract parent and sub-category
+    final categoryParts = transaction.category.split(' - ');
+    final parentCategory = categoryParts.isNotEmpty ? categoryParts[0] : 'Unknown';
+    final subCategory = categoryParts.length > 1 ? categoryParts[1] : '';
+    
+    final icon = _getCategoryIcon(parentCategory);
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -313,7 +352,7 @@ class HomeScreen extends StatelessWidget {
                     color: const Color(0xFF2A2A3F),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.shopping_bag, color: Colors.white, size: 20),
+                  child: Icon(icon, color: Colors.white, size: 20),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -321,14 +360,20 @@ class HomeScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       RunningText(
-                        transaction.category,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                        parentCategory,
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
                       ),
                       const SizedBox(height: 4),
-                      RunningText(
-                        '${transaction.date.toLocal().hour}:${transaction.date.toLocal().minute.toString().padLeft(2, '0')} - ${transaction.category.toUpperCase()}',
-                        style: const TextStyle(color: Colors.grey, fontSize: 12),
-                      ),
+                      if (subCategory.isNotEmpty)
+                        RunningText(
+                          subCategory,
+                          style: const TextStyle(color: Colors.grey, fontSize: 12),
+                        )
+                      else
+                        RunningText(
+                          '${transaction.date.toLocal().hour}:${transaction.date.toLocal().minute.toString().padLeft(2, '0')}',
+                          style: const TextStyle(color: Colors.grey, fontSize: 12),
+                        ),
                     ],
                   ),
                 ),
@@ -348,5 +393,38 @@ class HomeScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  IconData _getCategoryIcon(String category) {
+    // Expense categories
+    if (category == 'Housing') return Icons.home_rounded;
+    if (category == 'Utilities & Bills') return Icons.receipt_long_rounded;
+    if (category == 'Food') return Icons.restaurant;
+    if (category == 'Transportation') return Icons.directions_car_filled_rounded;
+    if (category == 'Healthcare') return Icons.local_hospital_rounded;
+    if (category == 'Debt & Financial') return Icons.account_balance_wallet_rounded;
+    if (category == 'Personal & Lifestyle') return Icons.self_improvement_rounded;
+    if (category == 'Entertainment') return Icons.movie_rounded;
+    if (category == 'Subscriptions & Services') return Icons.subscriptions_rounded;
+    if (category == 'Family & Education') return Icons.school_rounded;
+    if (category == 'Pets') return Icons.pets_rounded;
+    if (category == 'Travel') return Icons.flight_takeoff_rounded;
+    if (category == 'Giving & Obligations') return Icons.volunteer_activism_rounded;
+    if (category == 'Work-related') return Icons.work_rounded;
+    
+    // Income categories
+    if (category == 'Salary') return Icons.account_balance_wallet_rounded;
+    if (category == 'Freelance') return Icons.laptop_chromebook_rounded;
+    if (category == 'Investment') return Icons.trending_up_rounded;
+    if (category == 'Bonus') return Icons.card_giftcard_rounded;
+    
+    // Investment categories
+    if (category == 'Stocks') return Icons.show_chart;
+    if (category == 'Bonds') return Icons.trending_up_rounded;
+    if (category == 'Real Estate') return Icons.apartment_rounded;
+    if (category == 'Crypto') return Icons.currency_bitcoin_rounded;
+    if (category == 'Mutual Funds') return Icons.pie_chart_rounded;
+    
+    return Icons.category;
   }
 }

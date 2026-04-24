@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../models/transaction.dart';
 import '../utils/app_settings.dart';
+import '../utils/backup_sync_service.dart';
 import '../widgets/running_text.dart';
 
 class AddExpenseScreen extends StatefulWidget {
@@ -15,8 +16,9 @@ class AddExpenseScreen extends StatefulWidget {
 }
 
 class _AddExpenseScreenState extends State<AddExpenseScreen> {
-  final TextEditingController _amountController = TextEditingController(text: '0');
+  final TextEditingController _amountController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
+  final TextEditingController _customSubCategoryController = TextEditingController();
 
   String _category = 'Food';
   String _subCategory = 'Groceries';
@@ -37,6 +39,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     _ExpenseCategory('Travel', Icons.flight_takeoff_rounded),
     _ExpenseCategory('Giving & Obligations', Icons.volunteer_activism_rounded),
     _ExpenseCategory('Work-related', Icons.work_rounded),
+    _ExpenseCategory('Others', Icons.more_horiz_rounded),
   ];
 
   final Map<String, List<String>> _subCategoriesByCategory = const {
@@ -142,18 +145,22 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       'Extra commuting costs',
       'Other',
     ],
+    'Others': [],
   };
 
   @override
   void dispose() {
     _amountController.dispose();
     _notesController.dispose();
+    _customSubCategoryController.dispose();
     super.dispose();
   }
 
   double get _amountValue => double.tryParse(_amountController.text) ?? 0;
 
-  bool get _canSave => _amountValue > 0;
+  bool get _isCustomSubCategory => _category == 'Others';
+
+  bool get _canSave => _amountValue > 0 && (!_isCustomSubCategory || _customSubCategoryController.text.trim().isNotEmpty);
 
   @override
   Widget build(BuildContext context) {
@@ -161,7 +168,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     final currencySymbol = AppSettings.currencySymbol(activeCurrency);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: const Color(0xFF0D1124),
       body: SafeArea(
         child: Column(
           children: [
@@ -222,20 +229,6 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             ),
           ),
         ),
-        Text(
-          'AUTO-SAVE',
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.55),
-              fontSize: 11,
-              letterSpacing: 2.0,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(width: 10),
-        const CircleAvatar(
-          radius: 6,
-          backgroundColor: Color(0xFF78E06E),
-        ),
       ],
     );
   }
@@ -264,7 +257,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 child: Text(
                   currencySymbol,
                   style: const TextStyle(
-                    color: Color(0xFF8790FF),
+                    color: Color(0xFF7A85FF),
                     fontSize: 40,
                     fontWeight: FontWeight.w500,
                   ),
@@ -286,50 +279,24 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                       fontWeight: FontWeight.w700,
                       height: 1,
                     ),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       border: InputBorder.none,
                       isCollapsed: true,
+                      hintText: '0',
+                      hintStyle: TextStyle(
+                        color: const Color(0xFF2E2E2E).withValues(alpha: 0.22),
+                        fontSize: 72,
+                        fontWeight: FontWeight.w700,
+                        height: 1,
+                      ),
                     ),
                   ),
                 ),
               ),
-              _buildAmountStepper(),
             ],
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildAmountStepper() {
-    return Container(
-      width: 36,
-      height: 160,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF0F0F0),
-        borderRadius: BorderRadius.circular(2),
-      ),
-      child: Column(
-        children: [
-          Expanded(
-            child: InkWell(
-              onTap: () => _adjustAmount(1),
-              child: const Center(
-                child: Icon(Icons.keyboard_arrow_up_rounded, color: Color(0xFF8E8E8E), size: 34),
-              ),
-            ),
-          ),
-          Container(height: 1, color: Colors.black12),
-          Expanded(
-            child: InkWell(
-              onTap: () => _adjustAmount(-1),
-              child: const Center(
-                child: Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF8E8E8E), size: 34),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -347,7 +314,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
   Widget _buildCategorySelector() {
     return SizedBox(
-      height: 146,
+      height: 164,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemBuilder: (context, index) {
@@ -358,15 +325,18 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             onTap: () {
               setState(() {
                 _category = category.label;
-                _subCategory = _availableSubCategories.first;
+                _subCategory = _availableSubCategories.isNotEmpty ? _availableSubCategories.first : '';
+                if (!_isCustomSubCategory) {
+                  _customSubCategoryController.clear();
+                }
               });
             },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               width: 124,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
               decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF232D99) : const Color(0xFF2D2D2D),
+                color: isSelected ? const Color(0xFF7A85FF) : const Color(0xFF161626),
                 borderRadius: BorderRadius.circular(24),
               ),
               child: Column(
@@ -386,15 +356,18 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  SizedBox(
-                    height: 34,
-                    child: RunningText(
-                      category.label,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: isSelected ? 1 : 0.78),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        category.label,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: isSelected ? 1 : 0.78),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ),
@@ -414,38 +387,55 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
+        color: const Color(0xFF161626),
         borderRadius: BorderRadius.circular(22),
       ),
-      child: Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: _availableSubCategories.map((subCategory) {
-          final isSelected = subCategory == _subCategory;
-          return GestureDetector(
-            onTap: () => setState(() => _subCategory = subCategory),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF7D86FF) : const Color(0xFF2A2A2A),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isSelected ? const Color(0xFFB8BBFF) : Colors.white10,
-                ),
+      child: _isCustomSubCategory
+          ? TextField(
+              controller: _customSubCategoryController,
+              onChanged: (_) => setState(() {}),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
               ),
-              child: RunningText(
-                subCategory,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: isSelected ? 1 : 0.85),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+              decoration: InputDecoration(
+                hintText: 'Enter sub category',
+                hintStyle: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.25),
                 ),
+                border: InputBorder.none,
+                prefixIcon: const Icon(Icons.edit_outlined, color: Color(0xFF7A85FF)),
               ),
+            )
+          : Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: _availableSubCategories.map((subCategory) {
+                final isSelected = subCategory == _subCategory;
+                return GestureDetector(
+                  onTap: () => setState(() => _subCategory = subCategory),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isSelected ? const Color(0xFF7A85FF) : const Color(0xFF1B1B2E),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isSelected ? const Color(0xFF7A85FF) : Colors.white10,
+                      ),
+                    ),
+                    child: RunningText(
+                      subCategory,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: isSelected ? 1 : 0.85),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
-          );
-        }).toList(),
-      ),
     );
   }
 
@@ -496,7 +486,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E),
+        color: const Color(0xFF1B1B2E),
         borderRadius: BorderRadius.circular(22),
       ),
       child: Column(
@@ -549,9 +539,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color(0xFF0B0B0D),
-            Color(0xFF17171A),
-            Color(0xFF09090B),
+            Color(0xFF0D1124),
+            Color(0xFF1B1B2E),
+            Color(0xFF0D1124),
           ],
         ),
       ),
@@ -619,13 +609,13 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               bottom: 18,
               child: Row(
                 children: [
-                  const Icon(Icons.shield_rounded, color: Color(0xFF84EA77), size: 18),
+                  const Icon(Icons.shield_rounded, color: Color(0xFF7A85FF), size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: RunningText(
                     'Secure Vault Encryption Active',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.62),
+                      color: Colors.white.withValues(alpha: 0.7),
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                     ),
@@ -647,9 +637,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       child: ElevatedButton(
         onPressed: _canSave ? _saveExpense : null,
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFB8BBFF),
-          disabledBackgroundColor: const Color(0xFF5C5C68),
-          foregroundColor: const Color(0xFF1A2F98),
+        backgroundColor: const Color(0xFF7A85FF),
+        disabledBackgroundColor: const Color(0xFF5C5C68),
+        foregroundColor: Colors.white,
           disabledForegroundColor: Colors.white54,
           elevation: 0,
           shape: RoundedRectangleBorder(
@@ -679,21 +669,15 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       width: 50,
       height: 50,
       decoration: BoxDecoration(
-        color: const Color(0xFF3A3A3A),
+        color: const Color(0xFF2A2A3F),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Icon(icon, color: const Color(0xFFC2C4FF), size: 24),
+      child: Icon(icon, color: const Color(0xFF7A85FF), size: 24),
     );
   }
 
   List<String> get _availableSubCategories =>
       _subCategoriesByCategory[_category] ?? const ['Other'];
-
-  void _adjustAmount(double delta) {
-    final updated = (_amountValue + delta).clamp(0, 9999999).toDouble();
-    _amountController.text = updated % 1 == 0 ? updated.toInt().toString() : updated.toStringAsFixed(2);
-    setState(() {});
-  }
 
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
@@ -739,16 +723,25 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       return;
     }
 
+    final resolvedSubCategory = _isCustomSubCategory ? _customSubCategoryController.text.trim() : _subCategory;
+    if (resolvedSubCategory.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a sub category before saving.')),
+      );
+      return;
+    }
+
     final transaction = Transaction(
       id: DateTime.now().toIso8601String(),
       amount: amount,
-      category: '$_category - $_subCategory',
+      category: '$_category - $resolvedSubCategory',
       date: _date,
       type: 'expense',
       notes: _notesController.text.trim(),
     );
 
     await Hive.box<Transaction>('transactions').add(transaction);
+    await BackupSyncService.instance.backupIfEnabled();
 
     if (!mounted) {
       return;

@@ -51,7 +51,7 @@ class MyApp extends StatelessWidget {
         '/add-expense': (context) => const AddExpenseScreen(),
         '/add-income': (context) => const AddIncomeScreen(),
         '/add-investment': (context) => const AddInvestmentScreen(),
-        '/settings': (context) => SettingsScreen(),
+        '/settings': (context) => const SettingsScreen(),
         '/backup': (context) => const BackupScreen(),
         '/restore': (context) => const RestoreScreen(),
       },
