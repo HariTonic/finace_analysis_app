@@ -7,6 +7,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:hive_flutter/hive_flutter.dart';
 
+import '../models/investment_holding.dart';
 import '../models/transaction.dart';
 import 'app_settings.dart';
 
@@ -210,12 +211,28 @@ class BackupSyncService {
         'notes': transaction.notes,
       };
     }).toList();
+    final investments = Hive.box<InvestmentHolding>('investments').values.map((investment) {
+      return <String, dynamic>{
+        'id': investment.id,
+        'type': investment.type,
+        'name': investment.name,
+        'quantity': investment.quantity,
+        'buyUnitPrice': investment.buyUnitPrice,
+        'currentUnitPrice': investment.currentUnitPrice,
+        'unitLabel': investment.unitLabel,
+        'purchaseDate': investment.purchaseDate.toIso8601String(),
+        'notes': investment.notes,
+        'symbol': investment.symbol,
+        'exchange': investment.exchange,
+      };
+    }).toList();
 
     return <String, dynamic>{
       'version': 1,
       'createdAt': DateTime.now().toIso8601String(),
       'settings': AppSettings.exportForBackup(),
       'transactions': transactions,
+      'investments': investments,
     };
   }
 
@@ -227,6 +244,8 @@ class BackupSyncService {
 
     final box = Hive.box<Transaction>('transactions');
     await box.clear();
+    final investmentBox = Hive.box<InvestmentHolding>('investments');
+    await investmentBox.clear();
 
     final transactions = payload['transactions'];
     if (transactions is List) {
@@ -244,6 +263,30 @@ class BackupSyncService {
           notes: '${item['notes'] ?? ''}',
         );
         await box.add(transaction);
+      }
+    }
+
+    final investments = payload['investments'];
+    if (investments is List) {
+      for (final item in investments) {
+        if (item is! Map) {
+          continue;
+        }
+
+        final investment = InvestmentHolding(
+          id: '${item['id'] ?? DateTime.now().toIso8601String()}',
+          type: '${item['type'] ?? 'other'}',
+          name: '${item['name'] ?? ''}',
+          quantity: ((item['quantity'] ?? 0) as num).toDouble(),
+          buyUnitPrice: ((item['buyUnitPrice'] ?? 0) as num).toDouble(),
+          currentUnitPrice: ((item['currentUnitPrice'] ?? 0) as num).toDouble(),
+          unitLabel: '${item['unitLabel'] ?? ''}',
+          purchaseDate: DateTime.tryParse('${item['purchaseDate'] ?? ''}') ?? DateTime.now(),
+          notes: '${item['notes'] ?? ''}',
+          symbol: '${item['symbol'] ?? ''}',
+          exchange: '${item['exchange'] ?? ''}',
+        );
+        await investmentBox.add(investment);
       }
     }
 

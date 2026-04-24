@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import '../models/investment_holding.dart';
 import '../models/transaction.dart';
 import '../utils/app_settings.dart';
 import '../utils/export_helper.dart';
@@ -13,50 +14,58 @@ class HomeScreen extends StatelessWidget {
     return ValueListenableBuilder(
       valueListenable: Hive.box<Transaction>('transactions').listenable(),
       builder: (context, Box<Transaction> box, _) {
-        final settings = Hive.box('settings');
-        final activeCurrency = settings.get(AppSettings.currencyKey, defaultValue: AppSettings.defaultCurrency) as String;
-        final transactions = box.values.toList();
-        final totalIncome = transactions
-            .where((t) => t.type == 'income')
-            .fold(0.0, (sum, t) => sum + t.amount);
-        final totalExpense = transactions
-            .where((t) => t.type == 'expense')
-            .fold(0.0, (sum, t) => sum + t.amount);
-        final balance = totalIncome - totalExpense;
-        final recentTransactions = transactions.take(5).toList();
+        return ValueListenableBuilder(
+          valueListenable: Hive.box<InvestmentHolding>('investments').listenable(),
+          builder: (context, Box<InvestmentHolding> investmentBox, _) {
+            final settings = Hive.box('settings');
+            final activeCurrency = settings.get(AppSettings.currencyKey, defaultValue: AppSettings.defaultCurrency) as String;
+            final transactions = box.values.toList();
+            final totalIncome = transactions
+                .where((t) => t.type == 'income')
+                .fold(0.0, (sum, t) => sum + t.amount);
+            final totalExpense = transactions
+                .where((t) => t.type == 'expense')
+                .fold(0.0, (sum, t) => sum + t.amount);
+            final totalInvestment = transactions
+                .where((t) => t.type == 'investment')
+                .fold(0.0, (sum, t) => sum + t.amount);
+            final balance = totalIncome - totalExpense - totalInvestment;
+            final recentTransactions = transactions.take(5).toList();
+            final holdings = investmentBox.values.toList();
+            final holdingsCurrentValue = holdings.fold<double>(0, (sum, item) => sum + item.currentValue);
 
-        final installDate = AppSettings.getInstallDate();
-        final latestEntryDate = transactions.isNotEmpty
-            ? transactions.map((t) => t.date).reduce((a, b) => a.isAfter(b) ? a : b)
-            : installDate;
-        final now = DateTime.now();
-        final today = DateTime(now.year, now.month, now.day);
-        final latestEntryDay = DateTime(latestEntryDate.year, latestEntryDate.month, latestEntryDate.day);
-        final pendingDays = today.difference(latestEntryDay).inDays;
-        final pendingLabel = pendingDays <= 0
-            ? 'All caught up'
-            : '$pendingDays day${pendingDays == 1 ? '' : 's'} pending';
-        final headerDate = '${now.month.toString().padLeft(2, '0')}/${now.day.toString().padLeft(2, '0')}/${now.year}';
+            final installDate = AppSettings.getInstallDate();
+            final latestEntryDate = transactions.isNotEmpty
+                ? transactions.map((t) => t.date).reduce((a, b) => a.isAfter(b) ? a : b)
+                : installDate;
+            final now = DateTime.now();
+            final today = DateTime(now.year, now.month, now.day);
+            final latestEntryDay = DateTime(latestEntryDate.year, latestEntryDate.month, latestEntryDate.day);
+            final pendingDays = today.difference(latestEntryDay).inDays;
+            final pendingLabel = pendingDays <= 0
+                ? 'All caught up'
+                : '$pendingDays day${pendingDays == 1 ? '' : 's'} pending';
+            final headerDate = '${now.month.toString().padLeft(2, '0')}/${now.day.toString().padLeft(2, '0')}/${now.year}';
 
-        String formatAmount(double value) => AppSettings.formatCurrency(value, activeCurrency);
-        String signAmount(double value) {
-          final sign = value < 0 ? '-' : '+';
-          return '$sign${AppSettings.currencySymbol(activeCurrency)}${value.abs().toStringAsFixed(2)}';
-        }
+            String formatAmount(double value) => AppSettings.formatCurrency(value, activeCurrency);
+            String signAmount(double value) {
+              final sign = value < 0 ? '-' : '+';
+              return '$sign${AppSettings.currencySymbol(activeCurrency)}${value.abs().toStringAsFixed(2)}';
+            }
 
-        Future<void> _exportData() async {
-          String csv = 'ID,Amount,Category,Date,Type,Notes\n';
-          for (var t in transactions) {
-            csv += '${t.id},${t.amount},${t.category},${t.date.toIso8601String()},${t.type},${t.notes}\n';
-          }
-          final path = await saveExportData(csv);
+            Future<void> _exportData() async {
+              String csv = 'ID,Amount,Category,Date,Type,Notes\n';
+              for (var t in transactions) {
+                csv += '${t.id},${t.amount},${t.category},${t.date.toIso8601String()},${t.type},${t.notes}\n';
+              }
+              final path = await saveExportData(csv);
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Data exported as CSV to $path')),
-          );
-        }
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Data exported as CSV to $path')),
+              );
+            }
 
-        return Container(
+            return Container(
           color: const Color(0xFF0D1124),
           child: SafeArea(
             child: SingleChildScrollView(
@@ -237,12 +246,36 @@ class HomeScreen extends StatelessWidget {
                     const Text('DAILY TOTAL SUMMARY', style: TextStyle(color: Colors.grey, letterSpacing: 1.6)),
                     const SizedBox(height: 16),
                     Text(
-                      signAmount(totalIncome - totalExpense),
+                      signAmount(totalIncome - totalExpense - totalInvestment),
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
-                        color: totalIncome - totalExpense < 0 ? Colors.redAccent : Colors.greenAccent,
+                        color: totalIncome - totalExpense - totalInvestment < 0 ? Colors.redAccent : Colors.greenAccent,
                       ),
+                    ),
+                    const SizedBox(height: 18),
+                    if (holdings.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 14),
+                        child: Text(
+                          'Current investment value: ${formatAmount(holdingsCurrentValue)}',
+                          style: const TextStyle(color: Colors.white70, fontSize: 14),
+                        ),
+                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _summaryStat('Income', formatAmount(totalIncome), Colors.greenAccent),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _summaryStat('Expense', formatAmount(totalExpense), Colors.redAccent),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _summaryStat('Invest', formatAmount(totalInvestment), Colors.lightBlueAccent),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 18),
                     Row(
@@ -286,6 +319,8 @@ class HomeScreen extends StatelessWidget {
         ),
       ),
     );
+          },
+        );
       },
     );
   }
@@ -384,9 +419,15 @@ class HomeScreen extends StatelessWidget {
           Text(
             transaction.type == 'expense'
                 ? '-${AppSettings.currencySymbol(activeCurrency)}${transaction.amount.toStringAsFixed(2)}'
-                : '+${AppSettings.currencySymbol(activeCurrency)}${transaction.amount.toStringAsFixed(2)}',
+                : transaction.type == 'income'
+                    ? '+${AppSettings.currencySymbol(activeCurrency)}${transaction.amount.toStringAsFixed(2)}'
+                    : '-${AppSettings.currencySymbol(activeCurrency)}${transaction.amount.toStringAsFixed(2)}',
             style: TextStyle(
-              color: transaction.type == 'expense' ? Colors.redAccent : Colors.greenAccent,
+              color: transaction.type == 'expense'
+                  ? Colors.redAccent
+                  : transaction.type == 'income'
+                      ? Colors.greenAccent
+                      : Colors.lightBlueAccent,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -420,11 +461,31 @@ class HomeScreen extends StatelessWidget {
     
     // Investment categories
     if (category == 'Stocks') return Icons.show_chart;
-    if (category == 'Bonds') return Icons.trending_up_rounded;
-    if (category == 'Real Estate') return Icons.apartment_rounded;
-    if (category == 'Crypto') return Icons.currency_bitcoin_rounded;
-    if (category == 'Mutual Funds') return Icons.pie_chart_rounded;
+    if (category == 'Stocks Investment' || category == 'Stocks') return Icons.show_chart;
+    if (category == 'Gold Investment' || category == 'Gold') return Icons.workspace_premium_rounded;
+    if (category == 'Other Investment') return Icons.widgets_rounded;
     
     return Icons.category;
+  }
+
+  Widget _summaryStat(String label, String value, Color valueColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2A3F),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.white60, fontSize: 11)),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(color: valueColor, fontWeight: FontWeight.w700, fontSize: 12),
+          ),
+        ],
+      ),
+    );
   }
 }

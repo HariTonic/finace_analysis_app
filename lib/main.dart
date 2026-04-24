@@ -9,13 +9,16 @@ import 'screens/add_investment_screen.dart';
 import 'screens/backup_screen.dart';
 import 'screens/restore_screen.dart';
 import 'screens/settings_screen.dart';
+import 'models/investment_holding.dart';
 import 'models/transaction.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
   Hive.registerAdapter(TransactionAdapter());
+  Hive.registerAdapter(InvestmentHoldingAdapter());
   await Hive.openBox<Transaction>('transactions');
+  await Hive.openBox<InvestmentHolding>('investments');
   await Hive.openBox('settings');
   AppSettings.getInstallDate();
 

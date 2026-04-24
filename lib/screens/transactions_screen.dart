@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import '../models/investment_holding.dart';
 import '../models/transaction.dart';
 import '../utils/app_settings.dart';
 import '../widgets/running_text.dart';
@@ -12,7 +13,7 @@ class TransactionsScreen extends StatefulWidget {
 }
 
 class _TransactionsScreenState extends State<TransactionsScreen> {
-  String _filterType = 'all'; // all, income, expense
+  String _filterType = 'all'; // all, income, expense, investment
   DateTime? _filterDate;
 
   @override
@@ -64,6 +65,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                             DropdownMenuItem(value: 'all', child: Text('All', style: TextStyle(color: Colors.white))),
                             DropdownMenuItem(value: 'income', child: Text('Income', style: TextStyle(color: Colors.white))),
                             DropdownMenuItem(value: 'expense', child: Text('Expense', style: TextStyle(color: Colors.white))),
+                            DropdownMenuItem(value: 'investment', child: Text('Investment', style: TextStyle(color: Colors.white))),
                           ],
                           onChanged: (value) {
                             setState(() {
@@ -227,11 +229,13 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             ),
             const SizedBox(width: 12),
             Text(
-              transaction.type == 'expense'
-                  ? '-${AppSettings.currencySymbol(activeCurrency)}${transaction.amount.toStringAsFixed(2)}'
-                  : '+${AppSettings.currencySymbol(activeCurrency)}${transaction.amount.toStringAsFixed(2)}',
+              transaction.type == 'income'
+                  ? '+${AppSettings.currencySymbol(activeCurrency)}${transaction.amount.toStringAsFixed(2)}'
+                  : '-${AppSettings.currencySymbol(activeCurrency)}${transaction.amount.toStringAsFixed(2)}',
               style: TextStyle(
-                color: transaction.type == 'expense' ? Colors.redAccent : Colors.greenAccent,
+                color: transaction.type == 'income'
+                    ? Colors.greenAccent
+                    : (transaction.type == 'investment' ? Colors.lightBlueAccent : Colors.redAccent),
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -266,10 +270,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     
     // Investment categories
     if (category == 'Stocks') return Icons.show_chart;
-    if (category == 'Bonds') return Icons.trending_up_rounded;
-    if (category == 'Real Estate') return Icons.apartment_rounded;
-    if (category == 'Crypto') return Icons.currency_bitcoin_rounded;
-    if (category == 'Mutual Funds') return Icons.pie_chart_rounded;
+    if (category == 'Stocks Investment' || category == 'Stocks') return Icons.show_chart;
+    if (category == 'Gold Investment' || category == 'Gold') return Icons.workspace_premium_rounded;
+    if (category == 'Other Investment') return Icons.widgets_rounded;
     
     return Icons.category;
   }
@@ -288,7 +291,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 leading: const Icon(Icons.delete_rounded, color: Colors.redAccent),
                 title: const Text('Delete', style: TextStyle(color: Colors.white)),
                 onTap: () {
-                  transaction.delete();
+                  _deleteTransaction(transaction);
                   Navigator.pop(context);
                 },
               ),
@@ -303,5 +306,16 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         );
       },
     );
+  }
+
+  Future<void> _deleteTransaction(Transaction transaction) async {
+    if (transaction.type == 'investment') {
+      final investmentBox = Hive.box<InvestmentHolding>('investments');
+      final investmentIndex = investmentBox.values.toList().indexWhere((item) => item.id == transaction.id);
+      if (investmentIndex != -1) {
+        await investmentBox.deleteAt(investmentIndex);
+      }
+    }
+    await transaction.delete();
   }
 }
