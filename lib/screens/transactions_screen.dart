@@ -1,12 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:intl/intl.dart';
+
+import 'add_expense_screen.dart';
+import 'add_income_screen.dart';
+import 'add_investment_screen.dart';
 import '../models/investment_holding.dart';
 import '../models/transaction.dart';
 import '../utils/app_settings.dart';
+import '../utils/backup_sync_service.dart';
 import '../widgets/running_text.dart';
 
 class TransactionsScreen extends StatefulWidget {
-  const TransactionsScreen({super.key});
+  const TransactionsScreen({super.key, this.onNavigateHome});
+
+  final VoidCallback? onNavigateHome;
 
   @override
   _TransactionsScreenState createState() => _TransactionsScreenState();
@@ -32,7 +40,13 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   Row(
                     children: [
                       IconButton(
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: () {
+                          if (widget.onNavigateHome != null) {
+                            widget.onNavigateHome!.call();
+                            return;
+                          }
+                          Navigator.maybePop(context);
+                        },
                         icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
@@ -50,28 +64,32 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   // Filter row
                   Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1B1B2E),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: DropdownButton<String>(
-                          value: _filterType,
-                          style: const TextStyle(color: Colors.white),
-                          dropdownColor: const Color(0xFF1B1B2E),
-                          underline: Container(),
-                          items: const [
-                            DropdownMenuItem(value: 'all', child: Text('All', style: TextStyle(color: Colors.white))),
-                            DropdownMenuItem(value: 'income', child: Text('Income', style: TextStyle(color: Colors.white))),
-                            DropdownMenuItem(value: 'expense', child: Text('Expense', style: TextStyle(color: Colors.white))),
-                            DropdownMenuItem(value: 'investment', child: Text('Investment', style: TextStyle(color: Colors.white))),
-                          ],
-                          onChanged: (value) {
-                            setState(() {
-                              _filterType = value!;
-                            });
-                          },
+                      Expanded(
+                        child: Container(
+                          height: 48,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1B1B2E),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: DropdownButton<String>(
+                            isExpanded: true,
+                            value: _filterType,
+                            style: const TextStyle(color: Colors.white),
+                            dropdownColor: const Color(0xFF1B1B2E),
+                            underline: const SizedBox.shrink(),
+                            items: const [
+                              DropdownMenuItem(value: 'all', child: Text('All', style: TextStyle(color: Colors.white))),
+                              DropdownMenuItem(value: 'income', child: Text('Income', style: TextStyle(color: Colors.white))),
+                              DropdownMenuItem(value: 'expense', child: Text('Expense', style: TextStyle(color: Colors.white))),
+                              DropdownMenuItem(value: 'investment', child: Text('Investment', style: TextStyle(color: Colors.white))),
+                            ],
+                            onChanged: (value) {
+                              setState(() {
+                                _filterType = value!;
+                              });
+                            },
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -91,14 +109,18 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                             }
                           },
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            height: 48,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
                             decoration: BoxDecoration(
                               color: const Color(0xFF1B1B2E),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Text(
-                              _filterDate == null ? 'Select Date' : _filterDate!.toString().split(' ')[0],
-                              style: const TextStyle(color: Colors.white),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                _filterDate == null ? 'Select Date' : DateFormat('yyyy-MM-dd').format(_filterDate!),
+                                style: const TextStyle(color: Colors.white),
+                              ),
                             ),
                           ),
                         ),
@@ -180,67 +202,91 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     
     final icon = _getCategoryIcon(parentCategory);
     
-    return GestureDetector(
-      onLongPress: () {
-        _showTransactionActions(transaction);
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Row(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2A2A3F),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(icon, color: Colors.white, size: 20),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2A2A3F),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                  child: Icon(icon, color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      RunningText(
+                        parentCategory,
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
+                      ),
+                      const SizedBox(height: 4),
+                      if (subCategory.isNotEmpty)
                         RunningText(
-                          parentCategory,
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
+                          subCategory,
+                          style: const TextStyle(color: Colors.grey, fontSize: 12),
+                        )
+                      else
+                        RunningText(
+                          '${transaction.date.toLocal().hour}:${transaction.date.toLocal().minute.toString().padLeft(2, '0')} - ${transaction.date.toLocal().day}/${transaction.date.toLocal().month}/${transaction.date.toLocal().year}',
+                          style: const TextStyle(color: Colors.grey, fontSize: 12),
                         ),
-                        const SizedBox(height: 4),
-                        if (subCategory.isNotEmpty)
-                          RunningText(
-                            subCategory,
-                            style: const TextStyle(color: Colors.grey, fontSize: 12),
-                          )
-                        else
-                          RunningText(
-                            '${transaction.date.toLocal().hour}:${transaction.date.toLocal().minute.toString().padLeft(2, '0')} - ${transaction.date.toLocal().day}/${transaction.date.toLocal().month}/${transaction.date.toLocal().year}',
-                            style: const TextStyle(color: Colors.grey, fontSize: 12),
-                          ),
-                      ],
-                    ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                transaction.type == 'income'
+                    ? '+${AppSettings.currencySymbol(activeCurrency)}${transaction.amount.toStringAsFixed(2)}'
+                    : '-${AppSettings.currencySymbol(activeCurrency)}${transaction.amount.toStringAsFixed(2)}',
+                style: TextStyle(
+                  color: transaction.type == 'income'
+                      ? Colors.greenAccent
+                      : (transaction.type == 'investment' ? Colors.lightBlueAccent : Colors.redAccent),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              PopupMenuButton<String>(
+                padding: EdgeInsets.zero,
+                color: const Color(0xFF1B1B2E),
+                icon: const Icon(Icons.more_vert_rounded, color: Colors.white70, size: 20),
+                onSelected: (value) async {
+                  if (value == 'edit') {
+                    await _editTransaction(transaction);
+                    return;
+                  }
+                  if (value == 'delete') {
+                    await _deleteTransaction(transaction);
+                  }
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem<String>(
+                    value: 'edit',
+                    child: Text('Edit'),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'delete',
+                    child: Text('Delete'),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              transaction.type == 'income'
-                  ? '+${AppSettings.currencySymbol(activeCurrency)}${transaction.amount.toStringAsFixed(2)}'
-                  : '-${AppSettings.currencySymbol(activeCurrency)}${transaction.amount.toStringAsFixed(2)}',
-              style: TextStyle(
-                color: transaction.type == 'income'
-                    ? Colors.greenAccent
-                    : (transaction.type == 'investment' ? Colors.lightBlueAccent : Colors.redAccent),
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -277,35 +323,54 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     return Icons.category;
   }
 
-  void _showTransactionActions(Transaction transaction) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        return Container(
-          color: const Color(0xFF161626),
-          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.delete_rounded, color: Colors.redAccent),
-                title: const Text('Delete', style: TextStyle(color: Colors.white)),
-                onTap: () {
-                  _deleteTransaction(transaction);
-                  Navigator.pop(context);
-                },
-              ),
-              const SizedBox(height: 8),
-              ListTile(
-                leading: const Icon(Icons.close_rounded, color: Colors.grey),
-                title: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-                onTap: () => Navigator.pop(context),
-              ),
-            ],
-          ),
+  Future<void> _editTransaction(Transaction transaction) async {
+    if (transaction.type == 'expense') {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AddExpenseScreen(transaction: transaction),
+        ),
+      );
+      return;
+    }
+
+    if (transaction.type == 'income') {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AddIncomeScreen(transaction: transaction),
+        ),
+      );
+      return;
+    }
+
+    if (transaction.type == 'investment') {
+      final holdingBox = Hive.box<InvestmentHolding>('investments');
+      final holding = holdingBox.values.cast<InvestmentHolding?>().firstWhere(
+        (item) => item?.id == transaction.id,
+        orElse: () => null,
+      );
+
+      if (holding == null) {
+        if (!mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Linked investment record was not found.')),
         );
-      },
-    );
+        return;
+      }
+
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AddInvestmentScreen(
+            transaction: transaction,
+            holding: holding,
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _deleteTransaction(Transaction transaction) async {
@@ -317,5 +382,6 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       }
     }
     await transaction.delete();
+    await BackupSyncService.instance.backupIfEnabled();
   }
 }

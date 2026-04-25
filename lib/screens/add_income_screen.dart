@@ -9,7 +9,9 @@ import '../utils/backup_sync_service.dart';
 import '../widgets/running_text.dart';
 
 class AddIncomeScreen extends StatefulWidget {
-  const AddIncomeScreen({super.key});
+  const AddIncomeScreen({super.key, this.transaction});
+
+  final Transaction? transaction;
 
   @override
   State<AddIncomeScreen> createState() => _AddIncomeScreenState();
@@ -33,6 +35,14 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
   double get _amountValue => double.tryParse(_amountController.text) ?? 0;
 
   bool get _canSave => _amountValue > 0;
+
+  bool get _isEditing => widget.transaction != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _populateForEdit();
+  }
 
   @override
   void dispose() {
@@ -94,9 +104,9 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
           constraints: const BoxConstraints(),
         ),
         const SizedBox(width: 14),
-        const Expanded(
+        Expanded(
           child: Text(
-            'Add Income',
+            _isEditing ? 'Edit Income' : 'Add Income',
             style: TextStyle(
               color: Colors.white,
               fontSize: 22,
@@ -452,11 +462,11 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
             borderRadius: BorderRadius.circular(26),
           ),
         ),
-        child: const Row(
+        child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              'Save Income',
+              _isEditing ? 'Update Income' : 'Save Income',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
@@ -526,16 +536,28 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
       return;
     }
 
-    final transaction = Transaction(
-      id: DateTime.now().toIso8601String(),
-      amount: amount,
-      category: _category,
-      date: _date,
-      type: 'income',
-      notes: _notesController.text.trim(),
-    );
+    final notes = _notesController.text.trim();
 
-    await Hive.box<Transaction>('transactions').add(transaction);
+    if (_isEditing) {
+      final transaction = widget.transaction!;
+      transaction
+        ..amount = amount
+        ..category = _category
+        ..date = _date
+        ..type = 'income'
+        ..notes = notes;
+      await transaction.save();
+    } else {
+      final transaction = Transaction(
+        id: DateTime.now().toIso8601String(),
+        amount: amount,
+        category: _category,
+        date: _date,
+        type: 'income',
+        notes: notes,
+      );
+      await Hive.box<Transaction>('transactions').add(transaction);
+    }
     await BackupSyncService.instance.backupIfEnabled();
 
     if (!mounted) {
@@ -543,6 +565,18 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
     }
 
     Navigator.pop(context);
+  }
+
+  void _populateForEdit() {
+    final transaction = widget.transaction;
+    if (transaction == null) {
+      return;
+    }
+
+    _amountController.text = transaction.amount.toStringAsFixed(2);
+    _notesController.text = transaction.notes;
+    _date = transaction.date;
+    _category = _categories.any((item) => item.label == transaction.category) ? transaction.category : 'Other';
   }
 }
 

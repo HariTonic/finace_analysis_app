@@ -103,24 +103,31 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget _buildTimeframeSelector() {
     return _ReportCard(
       title: 'Analysis Range',
-      subtitle: 'Use one rolling timeframe for the main balance and expense category charts.',
-      child: Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: _ReportTimeframe.values.map((timeframe) {
-          final isSelected = timeframe == _selectedTimeframe;
-          return ChoiceChip(
-            selected: isSelected,
-            label: Text(timeframe.label),
-            selectedColor: const Color(0xFF7A85FF),
-            backgroundColor: const Color(0xFF11182E),
-            labelStyle: TextStyle(
-              color: isSelected ? Colors.white : Colors.white70,
-              fontWeight: FontWeight.w600,
-            ),
-            onSelected: (_) => setState(() => _selectedTimeframe = timeframe),
-          );
-        }).toList(),
+      subtitle: 'Select timeframe for charts.',
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _ReportTimeframe.values.map((timeframe) {
+            final isSelected = timeframe == _selectedTimeframe;
+            return ChoiceChip(
+              selected: isSelected,
+              label: Text(
+                timeframe.label,
+                style: const TextStyle(fontSize: 12),
+              ),
+              selectedColor: const Color(0xFF7A85FF),
+              backgroundColor: const Color(0xFF11182E),
+              labelStyle: TextStyle(
+                color: isSelected ? Colors.white : Colors.white70,
+                fontWeight: FontWeight.w600,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              onSelected: (_) => setState(() => _selectedTimeframe = timeframe),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
@@ -128,7 +135,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget _buildSectionSelector() {
     return _ReportCard(
       title: 'Report View',
-      subtitle: 'Switch between the key report areas instead of scrolling through one long page.',
+      subtitle: 'Switch between report areas.',
       child: SegmentedButton<_ReportSection>(
         showSelectedIcon: false,
         style: ButtonStyle(
@@ -136,12 +143,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
             return states.contains(WidgetState.selected) ? const Color(0xFF2C417A) : const Color(0xFF0E1528);
           }),
           foregroundColor: WidgetStateProperty.all(Colors.white),
+          padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 10, vertical: 6)),
+          alignment: Alignment.center,
         ),
         segments: _ReportSection.values.map((section) {
           return ButtonSegment<_ReportSection>(
             value: section,
-            label: Text(section.label),
-            icon: Icon(section.icon),
+            label: Center(
+              child: Text(
+                section.label,
+                style: const TextStyle(fontSize: 12),
+                textAlign: TextAlign.center,
+              ),
+            ),
           );
         }).toList(),
         selected: <_ReportSection>{_selectedSection},
@@ -1208,7 +1222,7 @@ class _ReportCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFF121A30),
         borderRadius: BorderRadius.circular(26),
@@ -1221,19 +1235,20 @@ class _ReportCard extends StatelessWidget {
             title,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 20,
+              fontSize: 16,
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
             subtitle,
             style: const TextStyle(
               color: Colors.white70,
-              height: 1.4,
+              fontSize: 12,
+              height: 1.3,
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
           child,
         ],
       ),

@@ -10,7 +10,10 @@ import '../utils/backup_sync_service.dart';
 import '../utils/indian_stock_catalog.dart';
 
 class AddInvestmentScreen extends StatefulWidget {
-  const AddInvestmentScreen({super.key});
+  const AddInvestmentScreen({super.key, this.transaction, this.holding});
+
+  final Transaction? transaction;
+  final InvestmentHolding? holding;
 
   @override
   State<AddInvestmentScreen> createState() => _AddInvestmentScreenState();
@@ -57,6 +60,14 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
     };
   }
 
+  bool get _isEditing => widget.transaction != null && widget.holding != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _populateForEdit();
+  }
+
   @override
   Widget build(BuildContext context) {
     final currencyCode = AppSettings.getCurrency();
@@ -65,7 +76,7 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0D1124),
       appBar: AppBar(
-        title: const Text('Track Investments'),
+        title: Text(_isEditing ? 'Edit Investment' : 'Track Investments'),
       ),
       body: SafeArea(
         child: ValueListenableBuilder(
@@ -291,7 +302,7 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
             child: FilledButton.icon(
               onPressed: _canSave ? _saveHolding : null,
               icon: const Icon(Icons.save_outlined),
-              label: const Text('Save Investment'),
+              label: Text(_isEditing ? 'Update Investment' : 'Save Investment'),
             ),
           ),
           const SizedBox(height: 10),
@@ -468,7 +479,6 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
   }
 
   Future<void> _saveHolding() async {
-    final id = DateTime.now().toIso8601String();
     final currentUnitPrice = _currentPriceController.text.trim().isEmpty ? _buyPrice : _currentPrice;
     final name = switch (_selectedType) {
       _InvestmentType.stocks => _selectedStock!.name,
@@ -483,6 +493,8 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
       _InvestmentType.other => 'units',
     };
 
+    final id = _isEditing ? widget.holding!.id : DateTime.now().toIso8601String();
+    final notes = _notesController.text.trim();
     final holding = InvestmentHolding(
       id: id,
       type: _selectedType.name,
@@ -492,25 +504,48 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
       currentUnitPrice: currentUnitPrice,
       unitLabel: unitLabel,
       purchaseDate: _purchaseDate,
-      notes: _notesController.text.trim(),
+      notes: notes,
       symbol: symbol,
       exchange: exchange,
     );
 
-    await Hive.box<InvestmentHolding>('investments').add(holding);
+    final investmentBox = Hive.box<InvestmentHolding>('investments');
+    final transactionBox = Hive.box<Transaction>('transactions');
 
-    final transaction = Transaction(
-      id: id,
-      amount: holding.investedAmount,
-      category: '${_selectedType.label} - $name',
-      date: _purchaseDate,
-      type: 'investment',
-      notes: _notesController.text.trim(),
-    );
-    await Hive.box<Transaction>('transactions').add(transaction);
+    if (_isEditing) {
+      final existingHoldingIndex = investmentBox.values.toList().indexWhere((item) => item.id == id);
+      if (existingHoldingIndex != -1) {
+        await investmentBox.putAt(existingHoldingIndex, holding);
+      }
+
+      final transaction = widget.transaction!
+        ..amount = holding.investedAmount
+        ..category = '${_selectedType.label} - $name'
+        ..date = _purchaseDate
+        ..type = 'investment'
+        ..notes = notes;
+      await transaction.save();
+    } else {
+      await investmentBox.add(holding);
+
+      final transaction = Transaction(
+        id: id,
+        amount: holding.investedAmount,
+        category: '${_selectedType.label} - $name',
+        date: _purchaseDate,
+        type: 'investment',
+        notes: notes,
+      );
+      await transactionBox.add(transaction);
+    }
     await BackupSyncService.instance.backupIfEnabled();
 
     if (!mounted) {
+      return;
+    }
+
+    if (_isEditing) {
+      Navigator.pop(context);
       return;
     }
 
@@ -612,6 +647,38 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
 
     await box.putAt(index, updated);
     await BackupSyncService.instance.backupIfEnabled();
+  }
+
+  void _populateForEdit() {
+    final holding = widget.holding;
+    final transaction = widget.transaction;
+    if (holding == null || transaction == null) {
+      return;
+    }
+
+    _selectedType = _InvestmentType.values.firstWhere(
+      (item) => item.name == holding.type,
+      orElse: () => _InvestmentType.other,
+    );
+    _purchaseDate = holding.purchaseDate;
+    _quantityController.text = holding.quantity.toString();
+    _buyPriceController.text = holding.buyUnitPrice.toString();
+    _currentPriceController.text = holding.currentUnitPrice.toString();
+    _notesController.text = transaction.notes;
+
+    if (_selectedType == _InvestmentType.stocks) {
+      _selectedStock = IndianStockCatalog.options.firstWhere(
+        (option) => option.symbol == holding.symbol && option.exchange == holding.exchange,
+        orElse: () => IndianStockOption(
+          symbol: holding.symbol,
+          name: holding.name,
+          exchange: holding.exchange.isEmpty ? 'NSE' : holding.exchange,
+        ),
+      );
+      _stockSearchController.text = _selectedStock!.label;
+    } else if (_selectedType == _InvestmentType.other) {
+      _otherNameController.text = holding.name;
+    }
   }
 }
 

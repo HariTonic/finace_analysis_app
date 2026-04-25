@@ -9,7 +9,9 @@ import '../utils/backup_sync_service.dart';
 import '../widgets/running_text.dart';
 
 class AddExpenseScreen extends StatefulWidget {
-  const AddExpenseScreen({super.key});
+  const AddExpenseScreen({super.key, this.transaction});
+
+  final Transaction? transaction;
 
   @override
   State<AddExpenseScreen> createState() => _AddExpenseScreenState();
@@ -148,6 +150,14 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     'Others': [],
   };
 
+  bool get _isEditing => widget.transaction != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _populateForEdit();
+  }
+
   @override
   void dispose() {
     _amountController.dispose();
@@ -219,9 +229,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           constraints: const BoxConstraints(),
         ),
         const SizedBox(width: 14),
-        const Expanded(
+        Expanded(
           child: Text(
-            'Add Expense',
+            _isEditing ? 'Edit Expense' : 'Add Expense',
             style: TextStyle(
               color: Colors.white,
               fontSize: 22,
@@ -646,11 +656,11 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             borderRadius: BorderRadius.circular(26),
           ),
         ),
-        child: const Row(
+        child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              'Save Expense',
+              _isEditing ? 'Update Expense' : 'Save Expense',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
@@ -731,16 +741,28 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       return;
     }
 
-    final transaction = Transaction(
-      id: DateTime.now().toIso8601String(),
-      amount: amount,
-      category: '$_category - $resolvedSubCategory',
-      date: _date,
-      type: 'expense',
-      notes: _notesController.text.trim(),
-    );
+    final notes = _notesController.text.trim();
 
-    await Hive.box<Transaction>('transactions').add(transaction);
+    if (_isEditing) {
+      final transaction = widget.transaction!;
+      transaction
+        ..amount = amount
+        ..category = '$_category - $resolvedSubCategory'
+        ..date = _date
+        ..type = 'expense'
+        ..notes = notes;
+      await transaction.save();
+    } else {
+      final transaction = Transaction(
+        id: DateTime.now().toIso8601String(),
+        amount: amount,
+        category: '$_category - $resolvedSubCategory',
+        date: _date,
+        type: 'expense',
+        notes: notes,
+      );
+      await Hive.box<Transaction>('transactions').add(transaction);
+    }
     await BackupSyncService.instance.backupIfEnabled();
 
     if (!mounted) {
@@ -748,6 +770,35 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     }
 
     Navigator.pop(context);
+  }
+
+  void _populateForEdit() {
+    final transaction = widget.transaction;
+    if (transaction == null) {
+      return;
+    }
+
+    _amountController.text = transaction.amount.toStringAsFixed(2);
+    _notesController.text = transaction.notes;
+    _date = transaction.date;
+
+    final parts = transaction.category.split(' - ');
+    final category = parts.isNotEmpty ? parts.first : 'Food';
+    final subCategory = parts.length > 1 ? parts.sublist(1).join(' - ') : 'Groceries';
+
+    _category = _categories.any((item) => item.label == category) ? category : 'Others';
+    if (_category == 'Others') {
+      _customSubCategoryController.text = subCategory;
+      _subCategory = '';
+    } else {
+      final available = _subCategoriesByCategory[_category] ?? const <String>[];
+      _subCategory = available.contains(subCategory) ? subCategory : (available.isNotEmpty ? available.first : '');
+      if (!available.contains(subCategory) && subCategory.isNotEmpty) {
+        _category = 'Others';
+        _customSubCategoryController.text = subCategory;
+        _subCategory = '';
+      }
+    }
   }
 }
 

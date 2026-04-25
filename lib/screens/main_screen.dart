@@ -5,27 +5,22 @@ import 'reports_screen.dart';
 import 'settings_screen.dart';
 
 class MainScreen extends StatefulWidget {
-  const MainScreen({super.key});
+  const MainScreen({super.key, this.initialIndex = 0});
+
+  final int initialIndex;
 
   @override
   _MainScreenState createState() => _MainScreenState();
 }
 
 class _MainScreenState extends State<MainScreen> {
-  int _selectedIndex = 0;
+  late int _selectedIndex;
 
   static const List<String> _titles = <String>[
     'Dashboard',
     'Transactions',
     'Reports',
     'Settings',
-  ];
-
-  static const List<Widget> _widgetOptions = <Widget>[
-    HomeScreen(),
-    TransactionsScreen(),
-    ReportsScreen(),
-    SettingsScreen(),
   ];
 
   void _onItemTapped(int index) {
@@ -35,13 +30,26 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _selectedIndex = widget.initialIndex;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0D1124),
       appBar: AppBar(
         title: Text(_titles[_selectedIndex]),
       ),
-      body: _widgetOptions.elementAt(_selectedIndex),
+      body: [
+        const HomeScreen(),
+        TransactionsScreen(
+          onNavigateHome: () => _onItemTapped(0),
+        ),
+        const ReportsScreen(),
+        const SettingsScreen(),
+      ].elementAt(_selectedIndex),
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(
