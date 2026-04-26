@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:telephony/telephony.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../models/transaction.dart';
 import '../utils/app_settings.dart';
@@ -20,7 +22,8 @@ class AddExpenseScreen extends StatefulWidget {
 class _AddExpenseScreenState extends State<AddExpenseScreen> {
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
-  final TextEditingController _customSubCategoryController = TextEditingController();
+  final TextEditingController _customSubCategoryController =
+      TextEditingController();
 
   String _category = 'Food';
   String _subCategory = 'Groceries';
@@ -170,7 +173,10 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
   bool get _isCustomSubCategory => _category == 'Others';
 
-  bool get _canSave => _amountValue > 0 && (!_isCustomSubCategory || _customSubCategoryController.text.trim().isNotEmpty);
+  bool get _canSave =>
+      _amountValue > 0 &&
+      (!_isCustomSubCategory ||
+          _customSubCategoryController.text.trim().isNotEmpty);
 
   @override
   Widget build(BuildContext context) {
@@ -211,7 +217,22 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-              child: _buildSaveButton(),
+              child: Column(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _extractFromSMS,
+                    icon: const Icon(Icons.sms),
+                    label: const Text('Extract from SMS'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: const BorderSide(color: Color(0xFF7A85FF)),
+                      minimumSize: const Size(double.infinity, 50),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildSaveButton(),
+                ],
+              ),
             ),
           ],
         ),
@@ -277,11 +298,13 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 child: Center(
                   child: TextField(
                     controller: _amountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                     textAlign: TextAlign.center,
                     onChanged: (_) => setState(() {}),
                     inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                      FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d*\.?\d{0,2}')),
                     ],
                     style: const TextStyle(
                       color: Color(0xFF2E2E2E),
@@ -335,7 +358,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             onTap: () {
               setState(() {
                 _category = category.label;
-                _subCategory = _availableSubCategories.isNotEmpty ? _availableSubCategories.first : '';
+                _subCategory = _availableSubCategories.isNotEmpty
+                    ? _availableSubCategories.first
+                    : '';
                 if (!_isCustomSubCategory) {
                   _customSubCategoryController.clear();
                 }
@@ -346,7 +371,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               width: 124,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
               decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF7A85FF) : const Color(0xFF161626),
+                color: isSelected
+                    ? const Color(0xFF7A85FF)
+                    : const Color(0xFF161626),
                 borderRadius: BorderRadius.circular(24),
               ),
               child: Column(
@@ -356,7 +383,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                     width: 54,
                     height: 54,
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: isSelected ? 0.12 : 0.20),
+                      color: Colors.black
+                          .withValues(alpha: isSelected ? 0.12 : 0.20),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -374,7 +402,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: isSelected ? 1 : 0.78),
+                          color: Colors.white
+                              .withValues(alpha: isSelected ? 1 : 0.78),
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                         ),
@@ -414,7 +443,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   color: Colors.white.withValues(alpha: 0.25),
                 ),
                 border: InputBorder.none,
-                prefixIcon: const Icon(Icons.edit_outlined, color: Color(0xFF7A85FF)),
+                prefixIcon:
+                    const Icon(Icons.edit_outlined, color: Color(0xFF7A85FF)),
               ),
             )
           : Wrap(
@@ -426,18 +456,24 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   onTap: () => setState(() => _subCategory = subCategory),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 160),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: isSelected ? const Color(0xFF7A85FF) : const Color(0xFF1B1B2E),
+                      color: isSelected
+                          ? const Color(0xFF7A85FF)
+                          : const Color(0xFF1B1B2E),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: isSelected ? const Color(0xFF7A85FF) : Colors.white10,
+                        color: isSelected
+                            ? const Color(0xFF7A85FF)
+                            : Colors.white10,
                       ),
                     ),
                     child: RunningText(
                       subCategory,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: isSelected ? 1 : 0.85),
+                        color: Colors.white
+                            .withValues(alpha: isSelected ? 1 : 0.85),
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
@@ -619,17 +655,18 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               bottom: 18,
               child: Row(
                 children: [
-                  const Icon(Icons.shield_rounded, color: Color(0xFF7A85FF), size: 18),
+                  const Icon(Icons.shield_rounded,
+                      color: Color(0xFF7A85FF), size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: RunningText(
-                    'Secure Vault Encryption Active',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.7),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
+                      'Secure Vault Encryption Active',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
                   ),
                 ],
               ),
@@ -647,9 +684,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       child: ElevatedButton(
         onPressed: _canSave ? _saveExpense : null,
         style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF7A85FF),
-        disabledBackgroundColor: const Color(0xFF5C5C68),
-        foregroundColor: Colors.white,
+          backgroundColor: const Color(0xFF7A85FF),
+          disabledBackgroundColor: const Color(0xFF5C5C68),
+          foregroundColor: Colors.white,
           disabledForegroundColor: Colors.white54,
           elevation: 0,
           shape: RoundedRectangleBorder(
@@ -702,7 +739,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               primary: Color(0xFF8790FF),
               surface: Color(0xFF1E1E1E),
             ),
-            dialogTheme: const DialogThemeData(backgroundColor: Color(0xFF1A1A1A)),
+            dialogTheme:
+                const DialogThemeData(backgroundColor: Color(0xFF1A1A1A)),
           ),
           child: child!,
         );
@@ -716,12 +754,63 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
   String _formattedDateLabel() {
     final now = DateTime.now();
-    final isToday = now.year == _date.year && now.month == _date.month && now.day == _date.day;
+    final isToday = now.year == _date.year &&
+        now.month == _date.month &&
+        now.day == _date.day;
     final suffix = DateFormat('d MMM').format(_date);
     if (isToday) {
       return 'Today, $suffix';
     }
     return '${DateFormat('EEE').format(_date)}, $suffix';
+  }
+
+  Future<void> _extractFromSMS() async {
+    final status = await Permission.sms.request();
+    if (!status.isGranted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content:
+                Text('SMS permission is required to extract transactions.')),
+      );
+      return;
+    }
+
+    final telephony = Telephony.instance;
+    final messages = await telephony.getInboxSms();
+
+    // Find debited messages
+    final debitedPattern = RegExp(
+        r'A/c \*(\d+) debited Rs\. (\d+\.\d+) on (\d{2}-\d{2}-\d{2}) to (.+)\. UPI:(\d+)\. Not you\? SMS BLOCK to (\d+), Dial (\d+) for Cyber Fraud - (.+)');
+    for (final sms in messages) {
+      final match = debitedPattern.firstMatch(sms.body ?? '');
+      if (match != null) {
+        final amount = double.tryParse(match.group(2)!) ?? 0.0;
+        final dateStr = match.group(3)!;
+        final to = match.group(4)!;
+        final notes = sms.body!;
+
+        // Parse date, assume year 2026 if 26
+        final parts = dateStr.split('-');
+        final day = int.parse(parts[0]);
+        final month = int.parse(parts[1]);
+        final year = 2000 + int.parse(parts[2]);
+
+        final date = DateTime(year, month, day);
+
+        setState(() {
+          _amountController.text = amount.toStringAsFixed(2);
+          _notesController.text = notes;
+          _date = date;
+          _category = 'Others';
+          _customSubCategoryController.text = to;
+        });
+        return; // Use the first match
+      }
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No debited SMS found.')),
+    );
   }
 
   Future<void> _saveExpense() async {
@@ -733,7 +822,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       return;
     }
 
-    final resolvedSubCategory = _isCustomSubCategory ? _customSubCategoryController.text.trim() : _subCategory;
+    final resolvedSubCategory = _isCustomSubCategory
+        ? _customSubCategoryController.text.trim()
+        : _subCategory;
     if (resolvedSubCategory.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Enter a sub category before saving.')),
@@ -784,15 +875,19 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
     final parts = transaction.category.split(' - ');
     final category = parts.isNotEmpty ? parts.first : 'Food';
-    final subCategory = parts.length > 1 ? parts.sublist(1).join(' - ') : 'Groceries';
+    final subCategory =
+        parts.length > 1 ? parts.sublist(1).join(' - ') : 'Groceries';
 
-    _category = _categories.any((item) => item.label == category) ? category : 'Others';
+    _category =
+        _categories.any((item) => item.label == category) ? category : 'Others';
     if (_category == 'Others') {
       _customSubCategoryController.text = subCategory;
       _subCategory = '';
     } else {
       final available = _subCategoriesByCategory[_category] ?? const <String>[];
-      _subCategory = available.contains(subCategory) ? subCategory : (available.isNotEmpty ? available.first : '');
+      _subCategory = available.contains(subCategory)
+          ? subCategory
+          : (available.isNotEmpty ? available.first : '');
       if (!available.contains(subCategory) && subCategory.isNotEmpty) {
         _category = 'Others';
         _customSubCategoryController.text = subCategory;

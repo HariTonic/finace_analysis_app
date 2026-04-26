@@ -16,6 +16,8 @@ class AppSettings {
   static const String backupAccountEmailKey = 'backupAccountEmail';
   static const String backupAccountNameKey = 'backupAccountName';
 
+  static const String monthlySpendingLimitKey = 'monthlySpendingLimit';
+
   static const String defaultGender = 'Prefer not to say';
 
   static const List<String> genderOptions = [
@@ -37,7 +39,8 @@ class AppSettings {
   static Box<dynamic> get _settingsBox => Hive.box('settings');
 
   static String getCurrency() {
-    return _settingsBox.get(currencyKey, defaultValue: defaultCurrency) as String;
+    return _settingsBox.get(currencyKey, defaultValue: defaultCurrency)
+        as String;
   }
 
   static Future<void> setCurrency(String currency) async {
@@ -73,7 +76,8 @@ class AppSettings {
   }
 
   static String getProfileGender() {
-    return _settingsBox.get(profileGenderKey, defaultValue: defaultGender) as String;
+    return _settingsBox.get(profileGenderKey, defaultValue: defaultGender)
+        as String;
   }
 
   static String getProfileOccupation() {
@@ -145,6 +149,15 @@ class AppSettings {
     await _settingsBox.delete(backupAccountNameKey);
   }
 
+  static double getMonthlySpendingLimit() {
+    return _settingsBox.get(monthlySpendingLimitKey, defaultValue: 0.0)
+        as double;
+  }
+
+  static Future<void> setMonthlySpendingLimit(double limit) async {
+    await _settingsBox.put(monthlySpendingLimitKey, limit);
+  }
+
   static Map<String, dynamic> exportForBackup() {
     return {
       currencyKey: getCurrency(),
@@ -158,6 +171,7 @@ class AppSettings {
       backupLastSyncedAtKey: getBackupLastSyncedAt()?.toIso8601String(),
       backupAccountEmailKey: getBackupAccountEmail(),
       backupAccountNameKey: getBackupAccountName(),
+      monthlySpendingLimitKey: getMonthlySpendingLimit(),
     };
   }
 
@@ -183,6 +197,8 @@ class AppSettings {
       email: (data[backupAccountEmailKey] as String?) ?? '',
       name: (data[backupAccountNameKey] as String?) ?? '',
     );
+    await setMonthlySpendingLimit(
+        (data[monthlySpendingLimitKey] as num?)?.toDouble() ?? 0.0);
   }
 
   static DateTime? _readDate(dynamic value) {

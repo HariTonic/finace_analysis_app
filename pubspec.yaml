@@ -1,4 +1,4 @@
-name: finance_management_app
+name: moneyflow
 description: A finance management app using Flutter and Hive.
 version: 1.0.0+1
 
@@ -18,6 +18,10 @@ dependencies:
   extension_google_sign_in_as_googleapis_auth: ^2.0.12
   image_picker: ^1.1.2
   fl_chart: ^0.68.0
+  http: ^1.1.0
+  flutter_local_notifications: ^17.2.2
+  telephony: ^0.2.0
+  permission_handler: ^11.3.1
 
 dev_dependencies:
   flutter_test:

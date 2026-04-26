@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:telephony/telephony.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../models/transaction.dart';
 import '../utils/app_settings.dart';
@@ -86,7 +88,22 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-              child: _buildSaveButton(),
+              child: Column(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _extractFromSMS,
+                    icon: const Icon(Icons.sms),
+                    label: const Text('Extract from SMS'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: const BorderSide(color: Color(0xFF7A85FF)),
+                      minimumSize: const Size(double.infinity, 50),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildSaveButton(),
+                ],
+              ),
             ),
           ],
         ),
@@ -152,11 +169,13 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
                 child: Center(
                   child: TextField(
                     controller: _amountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                     textAlign: TextAlign.center,
                     onChanged: (_) => setState(() {}),
                     inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                      FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d*\.?\d{0,2}')),
                     ],
                     style: const TextStyle(
                       color: Color(0xFF474747),
@@ -215,7 +234,9 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
               width: 124,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
               decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF4ADE80) : const Color(0xFF161626),
+                color: isSelected
+                    ? const Color(0xFF4ADE80)
+                    : const Color(0xFF161626),
                 borderRadius: BorderRadius.circular(24),
               ),
               child: Column(
@@ -225,7 +246,8 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
                     width: 54,
                     height: 54,
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: isSelected ? 0.12 : 0.20),
+                      color: Colors.black
+                          .withValues(alpha: isSelected ? 0.12 : 0.20),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(category.icon, color: Colors.white, size: 26),
@@ -239,7 +261,9 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: isSelected ? Colors.black : Colors.white.withValues(alpha: 0.78),
+                          color: isSelected
+                              ? Colors.black
+                              : Colors.white.withValues(alpha: 0.78),
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                         ),
@@ -425,17 +449,18 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
               bottom: 18,
               child: Row(
                 children: [
-                  const Icon(Icons.shield_rounded, color: Color(0xFF4ADE80), size: 18),
+                  const Icon(Icons.shield_rounded,
+                      color: Color(0xFF4ADE80), size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: RunningText(
-                    'Income Record Encryption Active',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.62),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
+                      'Income Record Encryption Active',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.62),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
                   ),
                 ],
               ),
@@ -505,7 +530,8 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
               primary: Color(0xFF8FD8A6),
               surface: Color(0xFF1E1E1E),
             ),
-            dialogTheme: const DialogThemeData(backgroundColor: Color(0xFF1A1A1A)),
+            dialogTheme:
+                const DialogThemeData(backgroundColor: Color(0xFF1A1A1A)),
           ),
           child: child!,
         );
@@ -519,12 +545,62 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
 
   String _formattedDateLabel() {
     final now = DateTime.now();
-    final isToday = now.year == _date.year && now.month == _date.month && now.day == _date.day;
+    final isToday = now.year == _date.year &&
+        now.month == _date.month &&
+        now.day == _date.day;
     final suffix = DateFormat('d MMM').format(_date);
     if (isToday) {
       return 'Today, $suffix';
     }
     return '${DateFormat('EEE').format(_date)}, $suffix';
+  }
+
+  Future<void> _extractFromSMS() async {
+    final status = await Permission.sms.request();
+    if (!status.isGranted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content:
+                Text('SMS permission is required to extract transactions.')),
+      );
+      return;
+    }
+
+    final telephony = Telephony.instance;
+    final messages = await telephony.getInboxSms();
+
+    // Find credited messages
+    final creditedPattern = RegExp(
+        r'Rs\.(\d+\.\d+) credited to a/c \*(\d+) on (\d{2}/\d{2}/\d{4}) by a/c linked to VPA (.+) \(UPI Ref no (\d+)\)\.(.+)');
+    for (final sms in messages) {
+      final match = creditedPattern.firstMatch(sms.body ?? '');
+      if (match != null) {
+        final amount = double.tryParse(match.group(1)!) ?? 0.0;
+        final dateStr = match.group(3)!;
+        final from = match.group(4)!;
+        final notes = sms.body!;
+
+        // Parse date
+        final parts = dateStr.split('/');
+        final day = int.parse(parts[0]);
+        final month = int.parse(parts[1]);
+        final year = int.parse(parts[2]);
+
+        final date = DateTime(year, month, day);
+
+        setState(() {
+          _amountController.text = amount.toStringAsFixed(2);
+          _notesController.text = notes;
+          _date = date;
+          _category = 'Other';
+        });
+        return; // Use the first match
+      }
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No credited SMS found.')),
+    );
   }
 
   Future<void> _saveIncome() async {
@@ -576,7 +652,9 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
     _amountController.text = transaction.amount.toStringAsFixed(2);
     _notesController.text = transaction.notes;
     _date = transaction.date;
-    _category = _categories.any((item) => item.label == transaction.category) ? transaction.category : 'Other';
+    _category = _categories.any((item) => item.label == transaction.category)
+        ? transaction.category
+        : 'Other';
   }
 }
 

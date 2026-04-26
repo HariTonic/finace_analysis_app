@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'utils/app_settings.dart';
+import 'utils/notification_service.dart';
+import 'models/transaction.dart';
+import 'models/investment_holding.dart';
 import 'screens/splash_screen.dart';
 import 'screens/main_screen.dart';
 import 'screens/add_expense_screen.dart';
 import 'screens/add_income_screen.dart';
 import 'screens/add_investment_screen.dart';
 import 'screens/backup_screen.dart';
+import 'screens/backup_screen.dart';
 import 'screens/restore_screen.dart';
 import 'screens/settings_screen.dart';
-import 'models/investment_holding.dart';
-import 'models/transaction.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,6 +23,8 @@ void main() async {
   await Hive.openBox<InvestmentHolding>('investments');
   await Hive.openBox('settings');
   AppSettings.getInstallDate();
+  await NotificationService.initialize();
+  await NotificationService.scheduleDailyNotifications();
 
   runApp(const MyApp());
 }
@@ -31,7 +35,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Finance Management App',
+      title: 'MoneyFlow',
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: const Color(0xFF0D1124),
         primaryColor: const Color(0xFF5D6CFF),

@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:telephony/telephony.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../models/investment_holding.dart';
 import '../models/transaction.dart';
 import '../utils/app_settings.dart';
 import '../utils/backup_sync_service.dart';
-import '../utils/indian_stock_catalog.dart';
+import '../utils/yahoo_finance_service.dart';
 
 class AddInvestmentScreen extends StatefulWidget {
   const AddInvestmentScreen({super.key, this.transaction, this.holding});
@@ -28,8 +30,11 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
   final TextEditingController _notesController = TextEditingController();
 
   _InvestmentType _selectedType = _InvestmentType.stocks;
-  IndianStockOption? _selectedStock;
+  StockSearchResult? _selectedStock;
   DateTime _purchaseDate = DateTime.now();
+  bool _isFetchingPrice = false;
+  List<StockSearchResult> _searchResults = [];
+  bool _isSearching = false;
 
   @override
   void dispose() {
@@ -44,7 +49,8 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
 
   double get _quantity => double.tryParse(_quantityController.text) ?? 0;
   double get _buyPrice => double.tryParse(_buyPriceController.text) ?? 0;
-  double get _currentPrice => double.tryParse(_currentPriceController.text) ?? _buyPrice;
+  double get _currentPrice =>
+      double.tryParse(_currentPriceController.text) ?? _buyPrice;
   double get _investedAmount => _quantity * _buyPrice;
   double get _currentValue => _quantity * _currentPrice;
   double get _profitLoss => _currentValue - _investedAmount;
@@ -71,7 +77,8 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
   @override
   Widget build(BuildContext context) {
     final currencyCode = AppSettings.getCurrency();
-    String formatter(double value) => AppSettings.formatCurrency(value, currencyCode);
+    String formatter(double value) =>
+        AppSettings.formatCurrency(value, currencyCode);
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D1124),
@@ -80,13 +87,16 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
       ),
       body: SafeArea(
         child: ValueListenableBuilder(
-          valueListenable: Hive.box<InvestmentHolding>('investments').listenable(),
+          valueListenable:
+              Hive.box<InvestmentHolding>('investments').listenable(),
           builder: (context, Box<InvestmentHolding> box, _) {
             final holdings = box.values.toList()
               ..sort((a, b) => b.purchaseDate.compareTo(a.purchaseDate));
 
-            final totalInvested = holdings.fold<double>(0, (sum, item) => sum + item.investedAmount);
-            final totalCurrent = holdings.fold<double>(0, (sum, item) => sum + item.currentValue);
+            final totalInvested = holdings.fold<double>(
+                0, (sum, item) => sum + item.investedAmount);
+            final totalCurrent = holdings.fold<double>(
+                0, (sum, item) => sum + item.currentValue);
             final totalPnL = totalCurrent - totalInvested;
 
             return ListView(
@@ -132,7 +142,8 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
         children: [
           const Text(
             'Investment Vault',
-            style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800),
+            style: TextStyle(
+                color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 8),
           const Text(
@@ -145,7 +156,8 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
             runSpacing: 12,
             children: [
               _HeroMetric(label: 'Invested', value: formatter(totalInvested)),
-              _HeroMetric(label: 'Current Value', value: formatter(totalCurrent)),
+              _HeroMetric(
+                  label: 'Current Value', value: formatter(totalCurrent)),
               _HeroMetric(
                 label: 'P / L',
                 value: '${totalPnL >= 0 ? '+' : ''}${formatter(totalPnL)}',
@@ -162,7 +174,9 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
       showSelectedIcon: false,
       style: ButtonStyle(
         backgroundColor: WidgetStateProperty.resolveWith((states) {
-          return states.contains(WidgetState.selected) ? const Color(0xFF1D4ED8) : const Color(0xFF121A30);
+          return states.contains(WidgetState.selected)
+              ? const Color(0xFF1D4ED8)
+              : const Color(0xFF121A30);
         }),
         foregroundColor: WidgetStateProperty.all(Colors.white),
       ),
@@ -203,7 +217,8 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
     );
   }
 
-  Widget _buildEntryCard(String currencyCode, String Function(double) formatter) {
+  Widget _buildEntryCard(
+      String currencyCode, String Function(double) formatter) {
     final unitHint = switch (_selectedType) {
       _InvestmentType.stocks => 'Number of stocks',
       _InvestmentType.gold => 'Gold in grams',
@@ -232,7 +247,8 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
         children: [
           const Text(
             'Add Holding',
-            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
+            style: TextStyle(
+                color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),
           Text(
@@ -250,7 +266,9 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
           _buildNumberField(
             controller: _quantityController,
             label: unitHint,
-            prefixIcon: _selectedType == _InvestmentType.gold ? Icons.scale_rounded : Icons.confirmation_number_rounded,
+            prefixIcon: _selectedType == _InvestmentType.gold
+                ? Icons.scale_rounded
+                : Icons.confirmation_number_rounded,
           ),
           const SizedBox(height: 14),
           _buildNumberField(
@@ -290,13 +308,28 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
               spacing: 12,
               runSpacing: 12,
               children: [
-                _SummaryChip(label: 'Invested', value: formatter(_investedAmount)),
+                _SummaryChip(
+                    label: 'Invested', value: formatter(_investedAmount)),
                 _SummaryChip(label: 'Current', value: formatter(_currentValue)),
-                _SummaryChip(label: 'P / L', value: '${_profitLoss >= 0 ? '+' : ''}${formatter(_profitLoss)}'),
+                _SummaryChip(
+                    label: 'P / L',
+                    value:
+                        '${_profitLoss >= 0 ? '+' : ''}${formatter(_profitLoss)}'),
               ],
             ),
           ),
           const SizedBox(height: 18),
+          OutlinedButton.icon(
+            onPressed: _extractFromSMS,
+            icon: const Icon(Icons.sms),
+            label: const Text('Extract from SMS'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+              side: const BorderSide(color: Color(0xFF7A85FF)),
+              minimumSize: const Size(double.infinity, 50),
+            ),
+          ),
+          const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
@@ -307,7 +340,7 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
           ),
           const SizedBox(height: 10),
           const Text(
-            'Live NSE/BSE pricing is not wired yet. Common stock suggestions are included now, and current price is tracked manually until a licensed market-data provider is connected.',
+            'Search stocks and click "Fetch Current Price" to get live prices from Yahoo Finance. Use the "Refresh" button in Tracked Holdings to update all stock prices at once.',
             style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
           ),
         ],
@@ -316,62 +349,101 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
   }
 
   Widget _buildStockSearchField() {
-    return Autocomplete<IndianStockOption>(
-      optionsBuilder: (textEditingValue) {
-        return IndianStockCatalog.search(textEditingValue.text);
-      },
-      displayStringForOption: (option) => option.label,
-      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-        if (controller.text != _stockSearchController.text) {
-          controller.text = _stockSearchController.text;
-        }
-        return TextField(
-          controller: controller,
-          focusNode: focusNode,
+    return Column(
+      children: [
+        TextField(
+          controller: _stockSearchController,
           style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            labelText: 'Search stock from NSE/BSE list',
-            prefixIcon: Icon(Icons.search_rounded),
+          decoration: InputDecoration(
+            labelText: 'Search stock by name or symbol',
+            prefixIcon: const Icon(Icons.search_rounded),
+            suffixIcon: _isSearching
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: Padding(
+                      padding: EdgeInsets.all(12),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : null,
           ),
           onChanged: (value) {
-            _stockSearchController.text = value;
-            if (_selectedStock != null && _selectedStock!.label != value) {
-              setState(() => _selectedStock = null);
+            if (value.isNotEmpty) {
+              _searchStocks(value);
+            } else {
+              setState(() {
+                _searchResults = [];
+                _selectedStock = null;
+              });
             }
           },
-        );
-      },
-      optionsViewBuilder: (context, onSelected, options) {
-        return Align(
-          alignment: Alignment.topLeft,
-          child: Material(
-            color: const Color(0xFF10182E),
-            borderRadius: BorderRadius.circular(16),
-            child: SizedBox(
-              width: 420,
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                shrinkWrap: true,
-                itemCount: options.length,
-                itemBuilder: (context, index) {
-                  final option = options.elementAt(index);
-                  return ListTile(
-                    title: Text(option.name, style: const TextStyle(color: Colors.white)),
-                    subtitle: Text('${option.symbol} · ${option.exchange}', style: const TextStyle(color: Colors.white70)),
-                    onTap: () => onSelected(option),
-                  );
-                },
-              ),
+        ),
+        if (_searchResults.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF10182E),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white10),
+            ),
+            constraints: const BoxConstraints(maxHeight: 250),
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _searchResults.length,
+              itemBuilder: (context, index) {
+                final stock = _searchResults[index];
+                return ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  title: Text(
+                    stock.name,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                  ),
+                  subtitle: Text(
+                    '${stock.symbol} · ${stock.exchange}',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                  onTap: () => _selectStock(stock),
+                );
+              },
             ),
           ),
-        );
-      },
-      onSelected: (option) {
-        setState(() {
-          _selectedStock = option;
-          _stockSearchController.text = option.label;
-        });
-      },
+        ] else if (_stockSearchController.text.isNotEmpty && !_isSearching) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF10182E),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: const Text(
+              'No stocks found. Try a different search term.',
+              style: TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+          ),
+        ],
+        if (_selectedStock != null) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _isFetchingPrice ? null : _fetchAndPopulatePrice,
+              icon: _isFetchingPrice
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.cloud_download_outlined),
+              label: Text(_isFetchingPrice
+                  ? 'Fetching price...'
+                  : 'Fetch Current Price'),
+            ),
+          ),
+        ]
+      ],
     );
   }
 
@@ -393,7 +465,9 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
     required IconData prefixIcon,
     String? currencyCode,
   }) {
-    final prefixText = currencyCode == null ? null : '${AppSettings.currencySymbol(currencyCode)} ';
+    final prefixText = currencyCode == null
+        ? null
+        : '${AppSettings.currencySymbol(currencyCode)} ';
     return TextField(
       controller: controller,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -427,7 +501,8 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
     );
   }
 
-  Widget _buildHoldingsCard(List<InvestmentHolding> holdings, String Function(double) formatter) {
+  Widget _buildHoldingsCard(
+      List<InvestmentHolding> holdings, String Function(double) formatter) {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -438,14 +513,34 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Tracked Holdings',
-            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Your manual current prices update the current value and profit/loss in real time.',
-            style: TextStyle(color: Colors.white70, height: 1.4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Tracked Holdings',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Your manual current prices update the current value and profit/loss in real time.',
+                      style: TextStyle(color: Colors.white70, height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: () => _refreshAllStockPrices(holdings),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Refresh'),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           if (holdings.isEmpty)
@@ -478,22 +573,82 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
     }
   }
 
+  Future<void> _extractFromSMS() async {
+    final status = await Permission.sms.request();
+    if (!status.isGranted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content:
+                Text('SMS permission is required to extract transactions.')),
+      );
+      return;
+    }
+
+    final telephony = Telephony.instance;
+    final messages = await telephony.getInboxSms();
+
+    // Find investment messages
+    final investmentPattern = RegExp(
+        r'Thank you for trading with us\. Trade summary for (\d{2}-[A-Z]{3}-\d{4}) \( Trd Acc-([A-Z\d]+)\)\nEquity\n((?:BOUGHT \d+ [A-Z]+ @ \d+\.\d+\([A-Z]+\)\n?)+)Download Mobile: (.+)\.\n\n- (.+)');
+    for (final sms in messages) {
+      final match = investmentPattern.firstMatch(sms.body ?? '');
+      if (match != null) {
+        final dateStr = match.group(1)!;
+        final account = match.group(2)!;
+        final trades = match.group(3)!;
+        final notes = sms.body!;
+
+        // Parse date
+        final date = DateFormat('dd-MMM-yyyy').parse(dateStr);
+
+        // Parse amount from trades, sum them
+        final tradeLines = trades.split('\n');
+        double totalAmount = 0.0;
+        for (final line in tradeLines) {
+          final tradeMatch =
+              RegExp(r'BOUGHT (\d+) ([A-Z]+) @ (\d+\.\d+)\([A-Z]+\)')
+                  .firstMatch(line);
+          if (tradeMatch != null) {
+            final qty = int.parse(tradeMatch.group(1)!);
+            final price = double.parse(tradeMatch.group(3)!);
+            totalAmount += qty * price;
+          }
+        }
+
+        setState(() {
+          _buyPriceController.text = (totalAmount / 1).toStringAsFixed(2);
+          _notesController.text = notes;
+          _purchaseDate = date;
+        });
+        return; // Use the first match
+      }
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No investment SMS found.')),
+    );
+  }
+
   Future<void> _saveHolding() async {
-    final currentUnitPrice = _currentPriceController.text.trim().isEmpty ? _buyPrice : _currentPrice;
+    final currentUnitPrice =
+        _currentPriceController.text.trim().isEmpty ? _buyPrice : _currentPrice;
     final name = switch (_selectedType) {
       _InvestmentType.stocks => _selectedStock!.name,
       _InvestmentType.gold => 'Gold',
       _InvestmentType.other => _otherNameController.text.trim(),
     };
-    final symbol = _selectedType == _InvestmentType.stocks ? _selectedStock!.symbol : '';
-    final exchange = _selectedType == _InvestmentType.stocks ? _selectedStock!.exchange : '';
+    final symbol =
+        _selectedType == _InvestmentType.stocks ? _selectedStock!.symbol : '';
+    final exchange =
+        _selectedType == _InvestmentType.stocks ? _selectedStock!.exchange : '';
     final unitLabel = switch (_selectedType) {
       _InvestmentType.stocks => 'stocks',
       _InvestmentType.gold => 'grams',
       _InvestmentType.other => 'units',
     };
 
-    final id = _isEditing ? widget.holding!.id : DateTime.now().toIso8601String();
+    final id =
+        _isEditing ? widget.holding!.id : DateTime.now().toIso8601String();
     final notes = _notesController.text.trim();
     final holding = InvestmentHolding(
       id: id,
@@ -513,7 +668,8 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
     final transactionBox = Hive.box<Transaction>('transactions');
 
     if (_isEditing) {
-      final existingHoldingIndex = investmentBox.values.toList().indexWhere((item) => item.id == id);
+      final existingHoldingIndex =
+          investmentBox.values.toList().indexWhere((item) => item.id == id);
       if (existingHoldingIndex != -1) {
         await investmentBox.putAt(existingHoldingIndex, holding);
       }
@@ -568,15 +724,221 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
     });
   }
 
+  Future<void> _fetchAndPopulatePrice() async {
+    if (_selectedStock == null) return;
+
+    setState(() => _isFetchingPrice = true);
+
+    try {
+      final symbol = _selectedStock!.symbol;
+      final price = await YahooFinanceService.getCurrentPrice(symbol);
+
+      if (price != null && mounted) {
+        setState(() {
+          _currentPriceController.text = price.toStringAsFixed(2);
+        });
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Price updated: ${AppSettings.currencySymbol(AppSettings.getCurrency())}$price'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not fetch price. Please enter manually.'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error fetching price. Please try again.'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isFetchingPrice = false);
+      }
+    }
+  }
+
+  Future<void> _selectStock(StockSearchResult stock) async {
+    setState(() {
+      _selectedStock = stock;
+      _stockSearchController.text = stock.name;
+      _searchResults = [];
+    });
+
+    await _fetchAndPopulatePrice();
+  }
+
+  Future<void> _searchStocks(String query) async {
+    if (query.trim().isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+      });
+      return;
+    }
+
+    setState(() => _isSearching = true);
+
+    try {
+      final results = await YahooFinanceService.searchStocks(query);
+      if (mounted) {
+        setState(() {
+          _searchResults = results;
+          _isSearching = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _searchResults = [];
+          _isSearching = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _refreshAllStockPrices(List<InvestmentHolding> holdings) async {
+    // Filter only stock holdings that have symbols
+    final stockHoldings = holdings
+        .where((h) => h.type == 'stocks' && h.symbol.isNotEmpty)
+        .toList();
+
+    if (stockHoldings.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No stocks to refresh.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF10182E),
+        title: const Text('Refreshing Prices'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(
+              'Fetching current prices for ${stockHoldings.length} stock(s)...',
+              style: const TextStyle(color: Colors.white70),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      // Build list of symbols
+      final symbols = stockHoldings.map((h) => h.symbol).toList();
+
+      // Fetch all prices
+      final prices = await YahooFinanceService.getPrices(symbols);
+
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
+
+      if (prices.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not fetch prices. Please try again.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
+
+      // Update holdings with new prices
+      final investmentBox = Hive.box<InvestmentHolding>('investments');
+      int updatedCount = 0;
+
+      for (final holding in stockHoldings) {
+        final newPrice = prices[holding.symbol];
+
+        if (newPrice != null) {
+          final index = investmentBox.values
+              .toList()
+              .indexWhere((item) => item.id == holding.id);
+
+          if (index != -1) {
+            final updated = InvestmentHolding(
+              id: holding.id,
+              type: holding.type,
+              name: holding.name,
+              quantity: holding.quantity,
+              buyUnitPrice: holding.buyUnitPrice,
+              currentUnitPrice: newPrice,
+              unitLabel: holding.unitLabel,
+              purchaseDate: holding.purchaseDate,
+              notes: holding.notes,
+              symbol: holding.symbol,
+              exchange: holding.exchange,
+            );
+
+            await investmentBox.putAt(index, updated);
+            updatedCount++;
+          }
+        }
+      }
+
+      await BackupSyncService.instance.backupIfEnabled();
+
+      if (mounted) {
+        final pluralS = updatedCount == 1 ? '' : 's';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Updated prices for $updatedCount holding$pluralS'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error refreshing prices: ${e.toString()}'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _deleteHolding(InvestmentHolding holding) async {
     final box = Hive.box<InvestmentHolding>('investments');
     final transactionBox = Hive.box<Transaction>('transactions');
-    final holdingKey = box.values.toList().indexWhere((item) => item.id == holding.id);
+    final holdingKey =
+        box.values.toList().indexWhere((item) => item.id == holding.id);
     if (holdingKey != -1) {
       await box.deleteAt(holdingKey);
     }
 
-    final transactionKey = transactionBox.values.toList().indexWhere((item) => item.id == holding.id);
+    final transactionKey = transactionBox.values
+        .toList()
+        .indexWhere((item) => item.id == holding.id);
     if (transactionKey != -1) {
       await transactionBox.deleteAt(transactionKey);
     }
@@ -585,7 +947,8 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
   }
 
   Future<void> _showPriceUpdateDialog(InvestmentHolding holding) async {
-    final controller = TextEditingController(text: holding.currentUnitPrice.toStringAsFixed(2));
+    final controller = TextEditingController(
+        text: holding.currentUnitPrice.toStringAsFixed(2));
     final saved = await showDialog<bool>(
       context: context,
       builder: (context) {
@@ -599,7 +962,8 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
               FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,4}')),
             ],
             decoration: InputDecoration(
-              labelText: 'Current price per ${holding.unitLabel == 'grams' ? 'gram' : 'unit'}',
+              labelText:
+                  'Current price per ${holding.unitLabel == 'grams' ? 'gram' : 'unit'}',
             ),
           ),
           actions: [
@@ -626,7 +990,8 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
     }
 
     final box = Hive.box<InvestmentHolding>('investments');
-    final index = box.values.toList().indexWhere((item) => item.id == holding.id);
+    final index =
+        box.values.toList().indexWhere((item) => item.id == holding.id);
     if (index == -1) {
       return;
     }
@@ -667,15 +1032,12 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
     _notesController.text = transaction.notes;
 
     if (_selectedType == _InvestmentType.stocks) {
-      _selectedStock = IndianStockCatalog.options.firstWhere(
-        (option) => option.symbol == holding.symbol && option.exchange == holding.exchange,
-        orElse: () => IndianStockOption(
-          symbol: holding.symbol,
-          name: holding.name,
-          exchange: holding.exchange.isEmpty ? 'NSE' : holding.exchange,
-        ),
+      _selectedStock = StockSearchResult(
+        symbol: holding.symbol,
+        name: holding.name,
+        exchange: holding.exchange.isEmpty ? 'NSE' : holding.exchange,
       );
-      _stockSearchController.text = _selectedStock!.label;
+      _stockSearchController.text = holding.name;
     } else if (_selectedType == _InvestmentType.other) {
       _otherNameController.text = holding.name;
     }
@@ -712,9 +1074,12 @@ class _HeroMetric extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          Text(label,
+              style: const TextStyle(color: Colors.white70, fontSize: 12)),
           const SizedBox(height: 4),
-          Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+          Text(value,
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.w700)),
         ],
       ),
     );
@@ -741,9 +1106,12 @@ class _SummaryChip extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+          Text(label,
+              style: const TextStyle(color: Colors.white60, fontSize: 12)),
           const SizedBox(height: 4),
-          Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+          Text(value,
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.w700)),
         ],
       ),
     );
@@ -784,7 +1152,10 @@ class _HoldingTile extends StatelessWidget {
                   children: [
                     Text(
                       holding.name,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -821,8 +1192,10 @@ class _HoldingTile extends StatelessWidget {
             spacing: 12,
             runSpacing: 12,
             children: [
-              _MiniMetric(label: 'Invested', value: formatter(holding.investedAmount)),
-              _MiniMetric(label: 'Current', value: formatter(holding.currentValue)),
+              _MiniMetric(
+                  label: 'Invested', value: formatter(holding.investedAmount)),
+              _MiniMetric(
+                  label: 'Current', value: formatter(holding.currentValue)),
               _MiniMetric(
                 label: 'P / L',
                 value: '${isProfit ? '+' : ''}${formatter(holding.profitLoss)}',
@@ -858,9 +1231,11 @@ class _MiniMetric extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+          Text(label,
+              style: const TextStyle(color: Colors.white60, fontSize: 12)),
           const SizedBox(height: 4),
-          Text(value, style: TextStyle(color: valueColor, fontWeight: FontWeight.w700)),
+          Text(value,
+              style: TextStyle(color: valueColor, fontWeight: FontWeight.w700)),
         ],
       ),
     );

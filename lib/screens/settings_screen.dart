@@ -32,6 +32,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isProfileSaving = false;
   bool _isSyncing = false;
   GoogleSignInAccount? _googleAccount;
+  double _monthlySpendingLimit = 0.0;
 
   @override
   void initState() {
@@ -53,6 +54,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _selectedDob = AppSettings.getProfileDob();
     _profileImageBase64 = AppSettings.getProfileImageBase64();
     _backupEnabled = AppSettings.isBackupEnabled();
+    _monthlySpendingLimit = AppSettings.getMonthlySpendingLimit();
     _nameController.text = AppSettings.getProfileName();
     _occupationController.text = AppSettings.getProfileOccupation();
   }
@@ -132,6 +134,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       profileImageBase64: _profileImageBase64,
     );
     await AppSettings.setCurrency(_selectedCurrency);
+    await AppSettings.setMonthlySpendingLimit(_monthlySpendingLimit);
     await BackupSyncService.instance.backupIfEnabled();
 
     if (!mounted) {
@@ -388,9 +391,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D1124),
-      appBar: AppBar(
-        title: const Text('Settings'),
-      ),
       body: _isInitializing
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -649,24 +649,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return _SettingsCard(
       title: 'Preferences',
       subtitle: 'Keep the app display choices aligned with your profile backup.',
-      child: DropdownButtonFormField<String>(
-        initialValue: _selectedCurrency,
-        decoration: const InputDecoration(
-          labelText: 'Currency',
-          prefixIcon: Icon(Icons.currency_exchange_rounded),
-        ),
-        items: _currencyOptions.map((currency) {
-          return DropdownMenuItem<String>(
-            value: currency,
-            child: Text('$currency (${AppSettings.currencySymbol(currency)})'),
-          );
-        }).toList(),
-        onChanged: (value) {
-          if (value == null) {
-            return;
-          }
-          setState(() => _selectedCurrency = value);
-        },
+      child: Column(
+        children: [
+          DropdownButtonFormField<String>(
+            initialValue: _selectedCurrency,
+            decoration: const InputDecoration(
+              labelText: 'Currency',
+              prefixIcon: Icon(Icons.currency_exchange_rounded),
+            ),
+            items: _currencyOptions.map((currency) {
+              return DropdownMenuItem<String>(
+                value: currency,
+                child: Text('$currency (${AppSettings.currencySymbol(currency)})'),
+              );
+            }).toList(),
+            onChanged: (value) {
+              if (value == null) {
+                return;
+              }
+              setState(() => _selectedCurrency = value);
+            },
+          ),
+          const SizedBox(height: 14),
+          TextFormField(
+            initialValue: _monthlySpendingLimit == 0 ? '' : _monthlySpendingLimit.toString(),
+            decoration: const InputDecoration(
+              labelText: 'Monthly Spending Limit',
+              prefixIcon: Icon(Icons.account_balance_wallet_rounded),
+            ),
+            keyboardType: TextInputType.number,
+            onChanged: (value) {
+              final limit = double.tryParse(value) ?? 0.0;
+              setState(() => _monthlySpendingLimit = limit);
+            },
+          ),
+        ],
       ),
     );
   }
