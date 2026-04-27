@@ -2,14 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:telephony/telephony.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../models/investment_holding.dart';
 import '../models/transaction.dart';
 import '../utils/app_settings.dart';
 import '../utils/backup_sync_service.dart';
-import '../utils/yahoo_finance_service.dart';
 
 class AddInvestmentScreen extends StatefulWidget {
   const AddInvestmentScreen({super.key, this.transaction, this.holding});
@@ -22,7 +20,7 @@ class AddInvestmentScreen extends StatefulWidget {
 }
 
 class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
-  final TextEditingController _stockSearchController = TextEditingController();
+  final TextEditingController _stockNameController = TextEditingController();
   final TextEditingController _otherNameController = TextEditingController();
   final TextEditingController _quantityController = TextEditingController();
   final TextEditingController _buyPriceController = TextEditingController();
@@ -30,15 +28,11 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
   final TextEditingController _notesController = TextEditingController();
 
   _InvestmentType _selectedType = _InvestmentType.stocks;
-  StockSearchResult? _selectedStock;
   DateTime _purchaseDate = DateTime.now();
-  bool _isFetchingPrice = false;
-  List<StockSearchResult> _searchResults = [];
-  bool _isSearching = false;
 
   @override
   void dispose() {
-    _stockSearchController.dispose();
+    _stockNameController.dispose();
     _otherNameController.dispose();
     _quantityController.dispose();
     _buyPriceController.dispose();
@@ -60,7 +54,7 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
       return false;
     }
     return switch (_selectedType) {
-      _InvestmentType.stocks => _selectedStock != null,
+      _InvestmentType.stocks => _stockNameController.text.trim().isNotEmpty,
       _InvestmentType.gold => true,
       _InvestmentType.other => _otherNameController.text.trim().isNotEmpty,
     };
@@ -206,8 +200,7 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
         setState(() {
           _selectedType = selection.first;
           if (_selectedType != _InvestmentType.stocks) {
-            _selectedStock = null;
-            _stockSearchController.clear();
+            _stockNameController.clear();
           }
           if (_selectedType != _InvestmentType.other) {
             _otherNameController.clear();
@@ -253,14 +246,14 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
           const SizedBox(height: 6),
           Text(
             _selectedType == _InvestmentType.stocks
-                ? 'Search from common Indian stocks and track manual current price.'
+                ? 'Enter the stock name and track your investments.'
                 : _selectedType == _InvestmentType.gold
                     ? 'Track your gold grams with buy price and current price per gram.'
                     : 'Track any other investment with quantity and current unit value.',
             style: const TextStyle(color: Colors.white70, height: 1.4),
           ),
           const SizedBox(height: 18),
-          if (_selectedType == _InvestmentType.stocks) _buildStockSearchField(),
+          if (_selectedType == _InvestmentType.stocks) _buildStockNameField(),
           if (_selectedType == _InvestmentType.other) _buildOtherNameField(),
           if (_selectedType != _InvestmentType.gold) const SizedBox(height: 14),
           _buildNumberField(
@@ -319,17 +312,6 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
             ),
           ),
           const SizedBox(height: 18),
-          OutlinedButton.icon(
-            onPressed: _extractFromSMS,
-            icon: const Icon(Icons.sms),
-            label: const Text('Extract from SMS'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.white,
-              side: const BorderSide(color: Color(0xFF7A85FF)),
-              minimumSize: const Size(double.infinity, 50),
-            ),
-          ),
-          const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
@@ -338,112 +320,20 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
               label: Text(_isEditing ? 'Update Investment' : 'Save Investment'),
             ),
           ),
-          const SizedBox(height: 10),
-          const Text(
-            'Search stocks and click "Fetch Current Price" to get live prices from Yahoo Finance. Use the "Refresh" button in Tracked Holdings to update all stock prices at once.',
-            style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildStockSearchField() {
-    return Column(
-      children: [
-        TextField(
-          controller: _stockSearchController,
-          style: const TextStyle(color: Colors.white),
-          decoration: InputDecoration(
-            labelText: 'Search stock by name or symbol',
-            prefixIcon: const Icon(Icons.search_rounded),
-            suffixIcon: _isSearching
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: Padding(
-                      padding: EdgeInsets.all(12),
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                : null,
-          ),
-          onChanged: (value) {
-            if (value.isNotEmpty) {
-              _searchStocks(value);
-            } else {
-              setState(() {
-                _searchResults = [];
-                _selectedStock = null;
-              });
-            }
-          },
-        ),
-        if (_searchResults.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF10182E),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white10),
-            ),
-            constraints: const BoxConstraints(maxHeight: 250),
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: _searchResults.length,
-              itemBuilder: (context, index) {
-                final stock = _searchResults[index];
-                return ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  title: Text(
-                    stock.name,
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
-                  ),
-                  subtitle: Text(
-                    '${stock.symbol} · ${stock.exchange}',
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                  onTap: () => _selectStock(stock),
-                );
-              },
-            ),
-          ),
-        ] else if (_stockSearchController.text.isNotEmpty && !_isSearching) ...[
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF10182E),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white10),
-            ),
-            child: const Text(
-              'No stocks found. Try a different search term.',
-              style: TextStyle(color: Colors.white70, fontSize: 13),
-            ),
-          ),
-        ],
-        if (_selectedStock != null) ...[
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _isFetchingPrice ? null : _fetchAndPopulatePrice,
-              icon: _isFetchingPrice
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.cloud_download_outlined),
-              label: Text(_isFetchingPrice
-                  ? 'Fetching price...'
-                  : 'Fetch Current Price'),
-            ),
-          ),
-        ]
-      ],
+  Widget _buildStockNameField() {
+    return TextField(
+      controller: _stockNameController,
+      style: const TextStyle(color: Colors.white),
+      decoration: const InputDecoration(
+        labelText: 'Stock name',
+        prefixIcon: Icon(Icons.badge_outlined),
+      ),
+      onChanged: (_) => setState(() {}),
     );
   }
 
@@ -535,11 +425,6 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
                   ],
                 ),
               ),
-              FilledButton.icon(
-                onPressed: () => _refreshAllStockPrices(holdings),
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Refresh'),
-              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -573,74 +458,16 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
     }
   }
 
-  Future<void> _extractFromSMS() async {
-    final status = await Permission.sms.request();
-    if (!status.isGranted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content:
-                Text('SMS permission is required to extract transactions.')),
-      );
-      return;
-    }
-
-    final telephony = Telephony.instance;
-    final messages = await telephony.getInboxSms();
-
-    // Find investment messages
-    final investmentPattern = RegExp(
-        r'Thank you for trading with us\. Trade summary for (\d{2}-[A-Z]{3}-\d{4}) \( Trd Acc-([A-Z\d]+)\)\nEquity\n((?:BOUGHT \d+ [A-Z]+ @ \d+\.\d+\([A-Z]+\)\n?)+)Download Mobile: (.+)\.\n\n- (.+)');
-    for (final sms in messages) {
-      final match = investmentPattern.firstMatch(sms.body ?? '');
-      if (match != null) {
-        final dateStr = match.group(1)!;
-        final account = match.group(2)!;
-        final trades = match.group(3)!;
-        final notes = sms.body!;
-
-        // Parse date
-        final date = DateFormat('dd-MMM-yyyy').parse(dateStr);
-
-        // Parse amount from trades, sum them
-        final tradeLines = trades.split('\n');
-        double totalAmount = 0.0;
-        for (final line in tradeLines) {
-          final tradeMatch =
-              RegExp(r'BOUGHT (\d+) ([A-Z]+) @ (\d+\.\d+)\([A-Z]+\)')
-                  .firstMatch(line);
-          if (tradeMatch != null) {
-            final qty = int.parse(tradeMatch.group(1)!);
-            final price = double.parse(tradeMatch.group(3)!);
-            totalAmount += qty * price;
-          }
-        }
-
-        setState(() {
-          _buyPriceController.text = (totalAmount / 1).toStringAsFixed(2);
-          _notesController.text = notes;
-          _purchaseDate = date;
-        });
-        return; // Use the first match
-      }
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('No investment SMS found.')),
-    );
-  }
-
   Future<void> _saveHolding() async {
     final currentUnitPrice =
         _currentPriceController.text.trim().isEmpty ? _buyPrice : _currentPrice;
     final name = switch (_selectedType) {
-      _InvestmentType.stocks => _selectedStock!.name,
+      _InvestmentType.stocks => _stockNameController.text.trim(),
       _InvestmentType.gold => 'Gold',
       _InvestmentType.other => _otherNameController.text.trim(),
     };
-    final symbol =
-        _selectedType == _InvestmentType.stocks ? _selectedStock!.symbol : '';
-    final exchange =
-        _selectedType == _InvestmentType.stocks ? _selectedStock!.exchange : '';
+    final symbol = '';
+    final exchange = '';
     final unitLabel = switch (_selectedType) {
       _InvestmentType.stocks => 'stocks',
       _InvestmentType.gold => 'grams',
@@ -713,8 +540,7 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
 
   void _resetForm() {
     setState(() {
-      _selectedStock = null;
-      _stockSearchController.clear();
+      _stockNameController.clear();
       _otherNameController.clear();
       _quantityController.clear();
       _buyPriceController.clear();
@@ -722,209 +548,6 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
       _notesController.clear();
       _purchaseDate = DateTime.now();
     });
-  }
-
-  Future<void> _fetchAndPopulatePrice() async {
-    if (_selectedStock == null) return;
-
-    setState(() => _isFetchingPrice = true);
-
-    try {
-      final symbol = _selectedStock!.symbol;
-      final price = await YahooFinanceService.getCurrentPrice(symbol);
-
-      if (price != null && mounted) {
-        setState(() {
-          _currentPriceController.text = price.toStringAsFixed(2);
-        });
-
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                'Price updated: ${AppSettings.currencySymbol(AppSettings.getCurrency())}$price'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not fetch price. Please enter manually.'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Error fetching price. Please try again.'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isFetchingPrice = false);
-      }
-    }
-  }
-
-  Future<void> _selectStock(StockSearchResult stock) async {
-    setState(() {
-      _selectedStock = stock;
-      _stockSearchController.text = stock.name;
-      _searchResults = [];
-    });
-
-    await _fetchAndPopulatePrice();
-  }
-
-  Future<void> _searchStocks(String query) async {
-    if (query.trim().isEmpty) {
-      setState(() {
-        _searchResults = [];
-        _isSearching = false;
-      });
-      return;
-    }
-
-    setState(() => _isSearching = true);
-
-    try {
-      final results = await YahooFinanceService.searchStocks(query);
-      if (mounted) {
-        setState(() {
-          _searchResults = results;
-          _isSearching = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _searchResults = [];
-          _isSearching = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _refreshAllStockPrices(List<InvestmentHolding> holdings) async {
-    // Filter only stock holdings that have symbols
-    final stockHoldings = holdings
-        .where((h) => h.type == 'stocks' && h.symbol.isNotEmpty)
-        .toList();
-
-    if (stockHoldings.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No stocks to refresh.'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-      return;
-    }
-
-    if (!mounted) return;
-
-    // Show loading dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF10182E),
-        title: const Text('Refreshing Prices'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            Text(
-              'Fetching current prices for ${stockHoldings.length} stock(s)...',
-              style: const TextStyle(color: Colors.white70),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      // Build list of symbols
-      final symbols = stockHoldings.map((h) => h.symbol).toList();
-
-      // Fetch all prices
-      final prices = await YahooFinanceService.getPrices(symbols);
-
-      if (!mounted) return;
-      Navigator.pop(context); // Close loading dialog
-
-      if (prices.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not fetch prices. Please try again.'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-        return;
-      }
-
-      // Update holdings with new prices
-      final investmentBox = Hive.box<InvestmentHolding>('investments');
-      int updatedCount = 0;
-
-      for (final holding in stockHoldings) {
-        final newPrice = prices[holding.symbol];
-
-        if (newPrice != null) {
-          final index = investmentBox.values
-              .toList()
-              .indexWhere((item) => item.id == holding.id);
-
-          if (index != -1) {
-            final updated = InvestmentHolding(
-              id: holding.id,
-              type: holding.type,
-              name: holding.name,
-              quantity: holding.quantity,
-              buyUnitPrice: holding.buyUnitPrice,
-              currentUnitPrice: newPrice,
-              unitLabel: holding.unitLabel,
-              purchaseDate: holding.purchaseDate,
-              notes: holding.notes,
-              symbol: holding.symbol,
-              exchange: holding.exchange,
-            );
-
-            await investmentBox.putAt(index, updated);
-            updatedCount++;
-          }
-        }
-      }
-
-      await BackupSyncService.instance.backupIfEnabled();
-
-      if (mounted) {
-        final pluralS = updatedCount == 1 ? '' : 's';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Updated prices for $updatedCount holding$pluralS'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        Navigator.pop(context); // Close loading dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error refreshing prices: ${e.toString()}'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    }
   }
 
   Future<void> _deleteHolding(InvestmentHolding holding) async {
@@ -1032,12 +655,7 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
     _notesController.text = transaction.notes;
 
     if (_selectedType == _InvestmentType.stocks) {
-      _selectedStock = StockSearchResult(
-        symbol: holding.symbol,
-        name: holding.name,
-        exchange: holding.exchange.isEmpty ? 'NSE' : holding.exchange,
-      );
-      _stockSearchController.text = holding.name;
+      _stockNameController.text = holding.name;
     } else if (_selectedType == _InvestmentType.other) {
       _otherNameController.text = holding.name;
     }

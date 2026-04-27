@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:telephony/telephony.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../models/transaction.dart';
@@ -90,17 +89,6 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
               child: Column(
                 children: [
-                  OutlinedButton.icon(
-                    onPressed: _extractFromSMS,
-                    icon: const Icon(Icons.sms),
-                    label: const Text('Extract from SMS'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: const BorderSide(color: Color(0xFF7A85FF)),
-                      minimumSize: const Size(double.infinity, 50),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
                   _buildSaveButton(),
                 ],
               ),
@@ -553,54 +541,6 @@ class _AddIncomeScreenState extends State<AddIncomeScreen> {
       return 'Today, $suffix';
     }
     return '${DateFormat('EEE').format(_date)}, $suffix';
-  }
-
-  Future<void> _extractFromSMS() async {
-    final status = await Permission.sms.request();
-    if (!status.isGranted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content:
-                Text('SMS permission is required to extract transactions.')),
-      );
-      return;
-    }
-
-    final telephony = Telephony.instance;
-    final messages = await telephony.getInboxSms();
-
-    // Find credited messages
-    final creditedPattern = RegExp(
-        r'Rs\.(\d+\.\d+) credited to a/c \*(\d+) on (\d{2}/\d{2}/\d{4}) by a/c linked to VPA (.+) \(UPI Ref no (\d+)\)\.(.+)');
-    for (final sms in messages) {
-      final match = creditedPattern.firstMatch(sms.body ?? '');
-      if (match != null) {
-        final amount = double.tryParse(match.group(1)!) ?? 0.0;
-        final dateStr = match.group(3)!;
-        final from = match.group(4)!;
-        final notes = sms.body!;
-
-        // Parse date
-        final parts = dateStr.split('/');
-        final day = int.parse(parts[0]);
-        final month = int.parse(parts[1]);
-        final year = int.parse(parts[2]);
-
-        final date = DateTime(year, month, day);
-
-        setState(() {
-          _amountController.text = amount.toStringAsFixed(2);
-          _notesController.text = notes;
-          _date = date;
-          _category = 'Other';
-        });
-        return; // Use the first match
-      }
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('No credited SMS found.')),
-    );
   }
 
   Future<void> _saveIncome() async {

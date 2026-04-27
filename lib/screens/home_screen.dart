@@ -136,11 +136,50 @@ class HomeScreen extends StatelessWidget {
                                     style: const TextStyle(
                                         fontSize: 18, color: Colors.white70)),
                                 const SizedBox(height: 8),
-                                LinearProgressIndicator(
-                                  value: progressValue,
-                                  backgroundColor: Colors.grey[800],
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      progressColor),
+                                Container(
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[800],
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Stack(
+                                      children: [
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              colors: [
+                                                Colors.yellow[600]!,
+                                                Colors.green[600]!,
+                                              ],
+                                              begin: Alignment.centerLeft,
+                                              end: Alignment.centerRight,
+                                            ),
+                                          ),
+                                        ),
+                                        Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: FractionallySizedBox(
+                                            widthFactor: progressValue,
+                                            heightFactor: 1,
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                gradient: LinearGradient(
+                                                  colors: [
+                                                    Colors.yellow[600]!,
+                                                    Colors.green[600]!,
+                                                  ],
+                                                  begin: Alignment.centerLeft,
+                                                  end: Alignment.centerRight,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                                 const SizedBox(height: 8),
                                 Row(
