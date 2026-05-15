@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "1023242503367",
+    "project_id": "moneflow-293b1",
+    "storage_bucket": "moneflow-293b1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1023242503367:android:9ae869e078ce8f83ee2ae2",
+        "android_client_info": {
+          "package_name": "com.example.finance_management_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1023242503367-bdusrqsijblo0o0rtim0p6dahn6f4caf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.finance_management_app",
+            "certificate_hash": "010b8bc69c5f10898971366e9c733b393ebf8d33"
+          }
+        },
+        {
+          "client_id": "1023242503367-qeaig8422p07nna9pcaqtv355lnar7l7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCIcy-_NV02FzyT3ePAUnkpAXP0bhY0OFY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1023242503367-qeaig8422p07nna9pcaqtv355lnar7l7.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,6 +1,11 @@
 {
     "chat.tools.terminal.autoApprove": {
         "flutter": true,
-        "dart": true
+        "dart": true,
+        "where": true,
+        "/^Get-ItemProperty 'HKCU:\\\\Software\\\\Android Studio' -Name \"InstallPath\" -ErrorAction SilentlyContinue \\| Select-Object -ExpandProperty InstallPath$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
     }
 }

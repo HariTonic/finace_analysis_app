@@ -16,6 +16,12 @@ class AppSettings {
   static const String backupAccountEmailKey = 'backupAccountEmail';
   static const String backupAccountNameKey = 'backupAccountName';
 
+  // Gmail backup settings
+  static const String gmailBackupAccountEmailKey = 'gmailBackupAccountEmail';
+  static const String gmailBackupAccountNameKey = 'gmailBackupAccountName';
+  static const String gmailBackupLastSyncedAtKey = 'gmailBackupLastSyncedAt';
+  static const String gmailBackupFrequencyKey = 'gmailBackupFrequency';
+
   static const String monthlySpendingLimitKey = 'monthlySpendingLimit';
 
   static const String defaultGender = 'Prefer not to say';
@@ -147,6 +153,49 @@ class AppSettings {
   static Future<void> clearBackupAccount() async {
     await _settingsBox.delete(backupAccountEmailKey);
     await _settingsBox.delete(backupAccountNameKey);
+  }
+
+  // Gmail Backup Methods
+  static String getGmailBackupEmail() {
+    return _settingsBox.get(gmailBackupAccountEmailKey, defaultValue: '') as String;
+  }
+
+  static String getGmailBackupName() {
+    return _settingsBox.get(gmailBackupAccountNameKey, defaultValue: '') as String;
+  }
+
+  static Future<void> setGmailBackupAccount({
+    required String email,
+    required String name,
+  }) async {
+    await _settingsBox.put(gmailBackupAccountEmailKey, email);
+    await _settingsBox.put(gmailBackupAccountNameKey, name);
+  }
+
+  static Future<void> clearGmailBackupAccount() async {
+    await _settingsBox.delete(gmailBackupAccountEmailKey);
+    await _settingsBox.delete(gmailBackupAccountNameKey);
+    await _settingsBox.delete(gmailBackupLastSyncedAtKey);
+  }
+
+  static DateTime? getGmailBackupLastSyncedAt() {
+    return _readDate(_settingsBox.get(gmailBackupLastSyncedAtKey));
+  }
+
+  static Future<void> setGmailBackupLastSyncedAt(DateTime? dateTime) async {
+    if (dateTime == null) {
+      await _settingsBox.delete(gmailBackupLastSyncedAtKey);
+      return;
+    }
+    await _settingsBox.put(gmailBackupLastSyncedAtKey, dateTime);
+  }
+
+  static String getGmailBackupFrequency() {
+    return _settingsBox.get(gmailBackupFrequencyKey, defaultValue: 'never') as String;
+  }
+
+  static Future<void> setGmailBackupFrequency(String frequency) async {
+    await _settingsBox.put(gmailBackupFrequencyKey, frequency);
   }
 
   static double getMonthlySpendingLimit() {

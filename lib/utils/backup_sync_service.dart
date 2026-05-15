@@ -145,7 +145,7 @@ class BackupSyncService {
       throw const FormatException('Backup data format is invalid.');
     }
 
-    await _applyBackupPayload(decoded);
+    await applyBackupPayload(decoded);
     return true;
   }
 
@@ -236,7 +236,7 @@ class BackupSyncService {
     };
   }
 
-  Future<void> _applyBackupPayload(Map<String, dynamic> payload) async {
+  Future<void> applyBackupPayload(Map<String, dynamic> payload) async {
     final settings = payload['settings'];
     if (settings is Map<String, dynamic>) {
       await AppSettings.restoreFromBackup(settings);

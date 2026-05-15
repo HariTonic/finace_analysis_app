@@ -12,6 +12,9 @@ import 'screens/add_income_screen.dart';
 import 'screens/add_investment_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/sms_extraction_screen.dart';
+import 'screens/backup_screen.dart';
+import 'screens/restore_screen.dart';
+import 'screens/backup_settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -64,6 +67,9 @@ class MyApp extends StatelessWidget {
         '/add-investment': (context) => const AddInvestmentScreen(),
         '/settings': (context) => const SettingsScreen(),
         '/extract-sms': (context) => const SmsExtractionScreen(),
+        '/backup': (context) => const BackupScreen(),
+        '/restore': (context) => const RestoreScreen(),
+        '/backup-settings': (context) => const BackupSettingsScreen(),
       },
     );
   }

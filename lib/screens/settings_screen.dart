@@ -271,6 +271,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 16),
           _buildProfileSection(theme),
           const SizedBox(height: 16),
+          _buildBackupSection(theme),
+          const SizedBox(height: 16),
           _buildImportSection(theme),
           const SizedBox(height: 16),
           _buildPreferencesSection(theme),
@@ -538,6 +540,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   : const Icon(Icons.upload_file_rounded),
               label: Text(_isImportingCsv ? 'Importing...' : 'Import CSV'),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBackupSection(ThemeData theme) {
+    return _SettingsCard(
+      title: 'Backup & Restore',
+      subtitle: 'Secure your data with Gmail and Google Drive',
+      child: Column(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.backup_rounded),
+            title: const Text('Back Up Data'),
+            subtitle: const Text('Gmail and Google Drive backup'),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+            onTap: () {
+              Navigator.pushNamed(context, '/backup');
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.restore_rounded),
+            title: const Text('Restore Data'),
+            subtitle: const Text('Restore from backup'),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+            onTap: () {
+              Navigator.pushNamed(context, '/restore');
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.schedule_rounded),
+            title: const Text('Backup Settings'),
+            subtitle: const Text('Schedule automatic backups'),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+            onTap: () {
+              Navigator.pushNamed(context, '/backup-settings');
+            },
           ),
         ],
       ),
