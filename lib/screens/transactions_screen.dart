@@ -293,33 +293,31 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 
   IconData _getCategoryIcon(String category) {
     // Expense categories
-    if (category == 'Housing') return Icons.home_rounded;
-    if (category == 'Utilities & Bills') return Icons.receipt_long_rounded;
+    if (category == 'Home') return Icons.home_rounded;
     if (category == 'Food') return Icons.restaurant;
-    if (category == 'Transportation') return Icons.directions_car_filled_rounded;
-    if (category == 'Healthcare') return Icons.local_hospital_rounded;
-    if (category == 'Debt & Financial') return Icons.account_balance_wallet_rounded;
-    if (category == 'Personal & Lifestyle') return Icons.self_improvement_rounded;
+    if (category == 'Transport') return Icons.directions_bus_rounded;
+    if (category == 'Vehicle') return Icons.directions_car_filled_rounded;
+    if (category == 'Personal & Shopping')
+      return Icons.shopping_bag_rounded;
+    if (category == 'Bills & Subscriptions') return Icons.receipt_long_rounded;
+    if (category == 'Medical') return Icons.local_hospital_rounded;
+    if (category == 'Education') return Icons.school_rounded;
     if (category == 'Entertainment') return Icons.movie_rounded;
-    if (category == 'Subscriptions & Services') return Icons.subscriptions_rounded;
-    if (category == 'Family & Education') return Icons.school_rounded;
-    if (category == 'Pets') return Icons.pets_rounded;
-    if (category == 'Travel') return Icons.flight_takeoff_rounded;
-    if (category == 'Giving & Obligations') return Icons.volunteer_activism_rounded;
-    if (category == 'Work-related') return Icons.work_rounded;
-    
+    if (category == 'Family') return Icons.family_restroom_rounded;
+    if (category == 'Debt') return Icons.account_balance_wallet_rounded;
+    if (category == 'Others') return Icons.more_horiz_rounded;
+
     // Income categories
     if (category == 'Salary') return Icons.account_balance_wallet_rounded;
     if (category == 'Freelance') return Icons.laptop_chromebook_rounded;
     if (category == 'Investment') return Icons.trending_up_rounded;
     if (category == 'Bonus') return Icons.card_giftcard_rounded;
-    
-    // Investment categories
+    if (category == 'Other') return Icons.widgets_rounded;
+
+    // Investment categories (if stored as transaction type)
     if (category == 'Stocks') return Icons.show_chart;
-    if (category == 'Stocks Investment' || category == 'Stocks') return Icons.show_chart;
-    if (category == 'Gold Investment' || category == 'Gold') return Icons.workspace_premium_rounded;
-    if (category == 'Other Investment') return Icons.widgets_rounded;
-    
+    if (category == 'Gold') return Icons.workspace_premium_rounded;
+
     return Icons.category;
   }
 

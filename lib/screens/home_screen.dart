@@ -1,9 +1,13 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'add_expense_screen.dart';
+import 'add_income_screen.dart';
+import 'add_investment_screen.dart';
 import '../models/investment_holding.dart';
 import '../models/transaction.dart';
 import '../utils/app_settings.dart';
+import '../utils/backup_sync_service.dart';
 import '../utils/export_helper.dart';
 import '../utils/notification_service.dart';
 import '../utils/transaction_csv_service.dart';
@@ -72,7 +76,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 NotificationService.showSpendingNotification(75);
               }
             }
-            final recentTransactions = transactions.take(5).toList();
+            final recentTransactions = transactions.where((transaction) {
+              return transaction.date.year == now.year &&
+                  transaction.date.month == now.month &&
+                  transaction.date.day == now.day;
+            }).toList()
+              ..sort((a, b) => b.date.compareTo(a.date));
             final holdings = investmentBox.values.toList();
             final holdingsCurrentValue = holdings.fold<double>(
                 0, (sum, item) => sum + item.currentValue);
@@ -370,7 +379,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             color: const Color(0xFF161626),
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          child: const Text('No recent transactions yet.',
+                          child: const Text('No transactions for today yet.',
                               style: TextStyle(color: Colors.grey)),
                         )
                       else
@@ -621,61 +630,147 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          Text(
-            transaction.type == 'expense'
-                ? '-${AppSettings.currencySymbol(activeCurrency)}${transaction.amount.toStringAsFixed(2)}'
-                : transaction.type == 'income'
-                    ? '+${AppSettings.currencySymbol(activeCurrency)}${transaction.amount.toStringAsFixed(2)}'
-                    : '-${AppSettings.currencySymbol(activeCurrency)}${transaction.amount.toStringAsFixed(2)}',
-            style: TextStyle(
-              color: transaction.type == 'expense'
-                  ? Colors.redAccent
-                  : transaction.type == 'income'
-                      ? Colors.greenAccent
-                      : Colors.lightBlueAccent,
-              fontWeight: FontWeight.bold,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                transaction.type == 'expense'
+                    ? '-${AppSettings.currencySymbol(activeCurrency)}${transaction.amount.toStringAsFixed(2)}'
+                    : transaction.type == 'income'
+                        ? '+${AppSettings.currencySymbol(activeCurrency)}${transaction.amount.toStringAsFixed(2)}'
+                        : '-${AppSettings.currencySymbol(activeCurrency)}${transaction.amount.toStringAsFixed(2)}',
+                style: TextStyle(
+                  color: transaction.type == 'expense'
+                      ? Colors.redAccent
+                      : transaction.type == 'income'
+                          ? Colors.greenAccent
+                          : Colors.lightBlueAccent,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              PopupMenuButton<String>(
+                padding: EdgeInsets.zero,
+                color: const Color(0xFF1B1B2E),
+                icon: const Icon(Icons.more_vert_rounded,
+                    color: Colors.white70, size: 20),
+                onSelected: (value) async {
+                  if (value == 'edit') {
+                    await _editTransaction(transaction);
+                    return;
+                  }
+                  if (value == 'delete') {
+                    await _deleteTransaction(transaction);
+                  }
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem<String>(
+                    value: 'edit',
+                    child: Text('Edit'),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'delete',
+                    child: Text('Delete'),
+                  ),
+                ],
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
+  Future<void> _editTransaction(Transaction transaction) async {
+    if (transaction.type == 'expense') {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AddExpenseScreen(transaction: transaction),
+        ),
+      );
+      return;
+    }
+
+    if (transaction.type == 'income') {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AddIncomeScreen(transaction: transaction),
+        ),
+      );
+      return;
+    }
+
+    if (transaction.type == 'investment') {
+      final holdingBox = Hive.box<InvestmentHolding>('investments');
+      final holding = holdingBox.values.cast<InvestmentHolding?>().firstWhere(
+            (item) => item?.id == transaction.id,
+            orElse: () => null,
+          );
+
+      if (holding == null) {
+        if (!mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Linked investment record was not found.')),
+        );
+        return;
+      }
+
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AddInvestmentScreen(
+            transaction: transaction,
+            holding: holding,
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteTransaction(Transaction transaction) async {
+    if (transaction.type == 'investment') {
+      final investmentBox = Hive.box<InvestmentHolding>('investments');
+      final investmentIndex = investmentBox.values
+          .toList()
+          .indexWhere((item) => item.id == transaction.id);
+      if (investmentIndex != -1) {
+        await investmentBox.deleteAt(investmentIndex);
+      }
+    }
+    await transaction.delete();
+    await BackupSyncService.instance.backupIfEnabled();
+  }
+
   IconData _getCategoryIcon(String category) {
     // Expense categories
-    if (category == 'Housing') return Icons.home_rounded;
-    if (category == 'Utilities & Bills') return Icons.receipt_long_rounded;
+    if (category == 'Home') return Icons.home_rounded;
     if (category == 'Food') return Icons.restaurant;
-    if (category == 'Transportation')
-      return Icons.directions_car_filled_rounded;
-    if (category == 'Healthcare') return Icons.local_hospital_rounded;
-    if (category == 'Debt & Financial')
-      return Icons.account_balance_wallet_rounded;
-    if (category == 'Personal & Lifestyle')
-      return Icons.self_improvement_rounded;
+    if (category == 'Transport') return Icons.directions_bus_rounded;
+    if (category == 'Vehicle') return Icons.directions_car_filled_rounded;
+    if (category == 'Personal & Shopping')
+      return Icons.shopping_bag_rounded;
+    if (category == 'Bills & Subscriptions') return Icons.receipt_long_rounded;
+    if (category == 'Medical') return Icons.local_hospital_rounded;
+    if (category == 'Education') return Icons.school_rounded;
     if (category == 'Entertainment') return Icons.movie_rounded;
-    if (category == 'Subscriptions & Services')
-      return Icons.subscriptions_rounded;
-    if (category == 'Family & Education') return Icons.school_rounded;
-    if (category == 'Pets') return Icons.pets_rounded;
-    if (category == 'Travel') return Icons.flight_takeoff_rounded;
-    if (category == 'Giving & Obligations')
-      return Icons.volunteer_activism_rounded;
-    if (category == 'Work-related') return Icons.work_rounded;
+    if (category == 'Family') return Icons.family_restroom_rounded;
+    if (category == 'Debt') return Icons.account_balance_wallet_rounded;
+    if (category == 'Others') return Icons.more_horiz_rounded;
 
     // Income categories
     if (category == 'Salary') return Icons.account_balance_wallet_rounded;
     if (category == 'Freelance') return Icons.laptop_chromebook_rounded;
     if (category == 'Investment') return Icons.trending_up_rounded;
     if (category == 'Bonus') return Icons.card_giftcard_rounded;
+    if (category == 'Other') return Icons.widgets_rounded;
 
-    // Investment categories
+    // Investment categories (if stored as transaction type)
     if (category == 'Stocks') return Icons.show_chart;
-    if (category == 'Stocks Investment' || category == 'Stocks')
-      return Icons.show_chart;
-    if (category == 'Gold Investment' || category == 'Gold')
-      return Icons.workspace_premium_rounded;
-    if (category == 'Other Investment') return Icons.widgets_rounded;
+    if (category == 'Gold') return Icons.workspace_premium_rounded;
 
     return Icons.category;
   }
