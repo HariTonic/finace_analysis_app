@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'utils/app_settings.dart';
 import 'utils/notification_service.dart';
+import 'utils/import_history.dart';
 import 'models/transaction.dart';
 import 'models/investment_holding.dart';
 import 'screens/splash_screen.dart';
@@ -9,10 +10,8 @@ import 'screens/main_screen.dart';
 import 'screens/add_expense_screen.dart';
 import 'screens/add_income_screen.dart';
 import 'screens/add_investment_screen.dart';
-import 'screens/backup_screen.dart';
-import 'screens/backup_screen.dart';
-import 'screens/restore_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/sms_extraction_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,9 +21,14 @@ void main() async {
   await Hive.openBox<Transaction>('transactions');
   await Hive.openBox<InvestmentHolding>('investments');
   await Hive.openBox('settings');
+  await ImportHistoryManager.initialize();
   AppSettings.getInstallDate();
-  await NotificationService.initialize();
-  await NotificationService.scheduleDailyNotifications();
+  try {
+    await NotificationService.initialize();
+    await NotificationService.scheduleDailyNotifications();
+  } catch (_) {
+    // Do not block app launch if notification setup fails on a device.
+  }
 
   runApp(const MyApp());
 }
@@ -59,8 +63,7 @@ class MyApp extends StatelessWidget {
         '/add-income': (context) => const AddIncomeScreen(),
         '/add-investment': (context) => const AddInvestmentScreen(),
         '/settings': (context) => const SettingsScreen(),
-        '/backup': (context) => const BackupScreen(),
-        '/restore': (context) => const RestoreScreen(),
+        '/extract-sms': (context) => const SmsExtractionScreen(),
       },
     );
   }

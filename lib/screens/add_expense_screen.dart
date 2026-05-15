@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../models/transaction.dart';
 import '../utils/app_settings.dart';
@@ -24,132 +23,139 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   final TextEditingController _customSubCategoryController =
       TextEditingController();
 
-  String _category = 'Food';
+  String _category = 'Home';
   String _subCategory = 'Groceries';
   DateTime _date = DateTime.now();
 
   final List<_ExpenseCategory> _categories = const [
-    _ExpenseCategory('Housing', Icons.home_rounded),
-    _ExpenseCategory('Utilities & Bills', Icons.receipt_long_rounded),
+    _ExpenseCategory('Home', Icons.home_rounded),
     _ExpenseCategory('Food', Icons.restaurant),
-    _ExpenseCategory('Transportation', Icons.directions_car_filled_rounded),
-    _ExpenseCategory('Healthcare', Icons.local_hospital_rounded),
-    _ExpenseCategory('Debt & Financial', Icons.account_balance_wallet_rounded),
-    _ExpenseCategory('Personal & Lifestyle', Icons.self_improvement_rounded),
+    _ExpenseCategory('Transport', Icons.directions_bus_rounded),
+    _ExpenseCategory('Vehicle', Icons.directions_car_filled_rounded),
+    _ExpenseCategory('Personal & Shopping', Icons.shopping_bag_rounded),
+    _ExpenseCategory('Bills & Subscriptions', Icons.receipt_long_rounded),
+    _ExpenseCategory('Medical', Icons.local_hospital_rounded),
+    _ExpenseCategory('Education', Icons.school_rounded),
     _ExpenseCategory('Entertainment', Icons.movie_rounded),
-    _ExpenseCategory('Subscriptions & Services', Icons.subscriptions_rounded),
-    _ExpenseCategory('Family & Education', Icons.school_rounded),
-    _ExpenseCategory('Pets', Icons.pets_rounded),
-    _ExpenseCategory('Travel', Icons.flight_takeoff_rounded),
-    _ExpenseCategory('Giving & Obligations', Icons.volunteer_activism_rounded),
-    _ExpenseCategory('Work-related', Icons.work_rounded),
+    _ExpenseCategory('Family', Icons.family_restroom_rounded),
+    _ExpenseCategory('Debt', Icons.account_balance_wallet_rounded),
     _ExpenseCategory('Others', Icons.more_horiz_rounded),
   ];
 
   final Map<String, List<String>> _subCategoriesByCategory = const {
-    'Housing': [
-      'Rent / Mortgage',
-      'Property taxes',
-      'Home maintenance & repairs',
-      'Furniture & decor',
-      'Other',
-    ],
-    'Utilities & Bills': [
+    'Home': [
+      'Rent',
       'Electricity',
-      'Water',
+      'Water Bill',
       'Gas',
       'Internet',
-      'Phone',
-      'TV / Cable',
-      'Other',
+      'Groceries',
+      'Maintenance',
+      'Maid',
+      'Furniture',
+      'Home Repair',
+      'Others',
     ],
     'Food': [
-      'Groceries',
-      'Dining out / Takeout',
-      'Coffee & snacks',
-      'Other',
+      'Restaurant',
+      'Food Delivery',
+      'Tea / Coffee',
+      'Snacks',
+      'Bakery',
+      'Street Food',
+      'Others',
     ],
-    'Transportation': [
+    'Transport': [
+      'Auto',
+      'Cab',
+      'Bus',
+      'Train',
+      'Metro',
+      'Flight',
+      'Parking',
+      'Toll',
+      'Others',
+    ],
+    'Vehicle': [
       'Fuel',
-      'Public transport',
-      'Car payment',
-      'Car maintenance & repairs',
-      'Car insurance',
-      'Parking & tolls',
-      'Vehicle registration & inspections',
-      'Other',
+      'Bike Service',
+      'Car Service',
+      'Vehicle Insurance',
+      'Repairs',
+      'Accessories',
+      'Others',
     ],
-    'Healthcare': [
-      'Health insurance',
-      'Doctor visits',
-      'Medication',
-      'Dental care',
-      'Vision care',
-      'Pharmacy items',
-      'Other',
+    'Personal & Shopping': [
+      'Clothing',
+      'Footwear',
+      'Grooming',
+      'Salon',
+      'Cosmetics',
+      'Accessories',
+      'Online Shopping',
+      'Household Items',
+      'Gifts',
+      'Gym',
+      'Laundry',
+      'Others',
     ],
-    'Debt & Financial': [
-      'Credit card payments',
-      'Personal loans',
-      'Bank fees',
-      'Late fees / penalties',
-      'Other',
+    'Bills & Subscriptions': [
+      'Mobile Recharge',
+      'Credit Card Bill',
+      'OTT',
+      'Software Subscription',
+      'Cloud Storage',
+      'Bank Charges',
+      'Others',
     ],
-    'Personal & Lifestyle': [
-      'Clothing & shoes',
-      'Laundry & dry cleaning',
-      'Personal care',
-      'Fitness',
-      'Hobbies & sports',
-      'Other',
+    'Medical': [
+      'Doctor',
+      'Medicines',
+      'Tests',
+      'Insurance',
+      'Emergency',
+      'Others',
+    ],
+    'Education': [
+      'Courses',
+      'Certifications',
+      'Books',
+      'Exam Fees',
+      'Others',
     ],
     'Entertainment': [
       'Movies',
-      'Concerts & events',
       'Games',
-      'Other',
+      'Outings',
+      'Events',
+      'Streaming',
+      'Parties',
+      'Others',
     ],
-    'Subscriptions & Services': [
-      'Streaming services',
-      'Apps & software',
-      'Memberships',
-      'Other',
+    'Family': [
+      'Parents Support',
+      'Kids',
+      'Festivals',
+      'Functions',
+      'Child Education',
+      'Others',
     ],
-    'Family & Education': [
-      'Childcare / babysitting',
-      'School supplies',
-      'Tuition / courses',
-      'Books',
-      'Other',
+    'Debt': [
+      'Personal Loan EMI',
+      'Home Loan EMI',
+      'Vehicle Loan EMI',
+      'Credit Card Due',
+      'Borrowed Money Return',
+      'Interest Payment',
+      'Friend/Family Repayment',
+      'Bike EMI',
+      'Car EMI',
+      'Home EMI',
+      'Others',
     ],
-    'Pets': [
-      'Pet food',
-      'Vet visits',
-      'Grooming',
-      'Pet insurance',
-      'Other',
+    'Others': [
+      'Others',
     ],
-    'Travel': [
-      'Flights / transport',
-      'Accommodation',
-      'Activities',
-      'Travel gear',
-      'Other',
-    ],
-    'Giving & Obligations': [
-      'Gifts',
-      'Donations / charity',
-      'Taxes',
-      'Legal / professional fees',
-      'Other',
-    ],
-    'Work-related': [
-      'Work supplies',
-      'Uniforms',
-      'Extra commuting costs',
-      'Other',
-    ],
-    'Others': [],
   };
 
   bool get _isEditing => widget.transaction != null;
@@ -170,12 +176,10 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
   double get _amountValue => double.tryParse(_amountController.text) ?? 0;
 
-  bool get _isCustomSubCategory => _category == 'Others';
+  bool get _showsOptionalCustomSubCategory =>
+      _category == 'Others' || _subCategory == 'Others';
 
-  bool get _canSave =>
-      _amountValue > 0 &&
-      (!_isCustomSubCategory ||
-          _customSubCategoryController.text.trim().isNotEmpty);
+  bool get _canSave => _amountValue > 0;
 
   @override
   Widget build(BuildContext context) {
@@ -349,7 +353,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 _subCategory = _availableSubCategories.isNotEmpty
                     ? _availableSubCategories.first
                     : '';
-                if (!_isCustomSubCategory) {
+                if (!_showsOptionalCustomSubCategory) {
                   _customSubCategoryController.clear();
                 }
               });
@@ -417,8 +421,46 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         color: const Color(0xFF161626),
         borderRadius: BorderRadius.circular(22),
       ),
-      child: _isCustomSubCategory
-          ? TextField(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: _availableSubCategories.map((subCategory) {
+              final isSelected = subCategory == _subCategory;
+              return GestureDetector(
+                onTap: () => setState(() => _subCategory = subCategory),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? const Color(0xFF7A85FF)
+                        : const Color(0xFF1B1B2E),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color:
+                          isSelected ? const Color(0xFF7A85FF) : Colors.white10,
+                    ),
+                  ),
+                  child: RunningText(
+                    subCategory,
+                    style: TextStyle(
+                      color:
+                          Colors.white.withValues(alpha: isSelected ? 1 : 0.85),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          if (_showsOptionalCustomSubCategory) ...[
+            const SizedBox(height: 14),
+            TextField(
               controller: _customSubCategoryController,
               onChanged: (_) => setState(() {}),
               style: const TextStyle(
@@ -426,7 +468,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 fontSize: 16,
               ),
               decoration: InputDecoration(
-                hintText: 'Enter sub category',
+                hintText: 'Enter custom subtype (optional)',
                 hintStyle: TextStyle(
                   color: Colors.white.withValues(alpha: 0.25),
                 ),
@@ -434,42 +476,10 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 prefixIcon:
                     const Icon(Icons.edit_outlined, color: Color(0xFF7A85FF)),
               ),
-            )
-          : Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: _availableSubCategories.map((subCategory) {
-                final isSelected = subCategory == _subCategory;
-                return GestureDetector(
-                  onTap: () => setState(() => _subCategory = subCategory),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 160),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? const Color(0xFF7A85FF)
-                          : const Color(0xFF1B1B2E),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isSelected
-                            ? const Color(0xFF7A85FF)
-                            : Colors.white10,
-                      ),
-                    ),
-                    child: RunningText(
-                      subCategory,
-                      style: TextStyle(
-                        color: Colors.white
-                            .withValues(alpha: isSelected ? 1 : 0.85),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
             ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -712,7 +722,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   }
 
   List<String> get _availableSubCategories =>
-      _subCategoriesByCategory[_category] ?? const ['Other'];
+      _subCategoriesByCategory[_category] ?? const ['Others'];
 
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
@@ -761,9 +771,10 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       return;
     }
 
-    final resolvedSubCategory = _isCustomSubCategory
-        ? _customSubCategoryController.text.trim()
-        : _subCategory;
+    final customSubCategory = _customSubCategoryController.text.trim();
+    final resolvedSubCategory = customSubCategory.isNotEmpty
+        ? customSubCategory
+        : (_subCategory.isNotEmpty ? _subCategory : 'Others');
     if (resolvedSubCategory.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Enter a sub category before saving.')),
@@ -813,24 +824,24 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     _date = transaction.date;
 
     final parts = transaction.category.split(' - ');
-    final category = parts.isNotEmpty ? parts.first : 'Food';
+    final category = parts.isNotEmpty ? parts.first : 'Home';
     final subCategory =
         parts.length > 1 ? parts.sublist(1).join(' - ') : 'Groceries';
 
     _category =
         _categories.any((item) => item.label == category) ? category : 'Others';
     if (_category == 'Others') {
-      _customSubCategoryController.text = subCategory;
-      _subCategory = '';
+      _customSubCategoryController.text =
+          subCategory == 'Others' ? '' : subCategory;
+      _subCategory = 'Others';
     } else {
       final available = _subCategoriesByCategory[_category] ?? const <String>[];
       _subCategory = available.contains(subCategory)
           ? subCategory
           : (available.isNotEmpty ? available.first : '');
       if (!available.contains(subCategory) && subCategory.isNotEmpty) {
-        _category = 'Others';
         _customSubCategoryController.text = subCategory;
-        _subCategory = '';
+        _subCategory = 'Others';
       }
     }
   }

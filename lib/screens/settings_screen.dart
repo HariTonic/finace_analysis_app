@@ -1,14 +1,16 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
+import '../models/transaction.dart';
 import '../utils/app_settings.dart';
-import '../utils/backup_sync_service.dart';
+import '../utils/import_history.dart';
+import '../utils/transaction_csv_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -18,7 +20,13 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final List<String> _currencyOptions = <String>['USD', 'EUR', 'GBP', 'INR', 'JPY'];
+  final List<String> _currencyOptions = <String>[
+    'USD',
+    'EUR',
+    'GBP',
+    'INR',
+    'JPY'
+  ];
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _occupationController = TextEditingController();
   final ImagePicker _imagePicker = ImagePicker();
@@ -27,18 +35,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _selectedGender = AppSettings.defaultGender;
   String _profileImageBase64 = '';
   DateTime? _selectedDob;
-  bool _backupEnabled = false;
-  bool _isInitializing = true;
   bool _isProfileSaving = false;
-  bool _isSyncing = false;
-  GoogleSignInAccount? _googleAccount;
+  bool _isPreferencesSaving = false;
+  bool _isImportingCsv = false;
   double _monthlySpendingLimit = 0.0;
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
-    _initializeGoogleAccount();
   }
 
   @override
@@ -53,22 +58,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _selectedGender = AppSettings.getProfileGender();
     _selectedDob = AppSettings.getProfileDob();
     _profileImageBase64 = AppSettings.getProfileImageBase64();
-    _backupEnabled = AppSettings.isBackupEnabled();
     _monthlySpendingLimit = AppSettings.getMonthlySpendingLimit();
     _nameController.text = AppSettings.getProfileName();
     _occupationController.text = AppSettings.getProfileOccupation();
-  }
-
-  Future<void> _initializeGoogleAccount() async {
-    final account = await BackupSyncService.instance.restorePreviousSignIn();
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _googleAccount = account;
-      _isInitializing = false;
-    });
   }
 
   Future<void> _pickDateOfBirth() async {
@@ -135,7 +127,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     await AppSettings.setCurrency(_selectedCurrency);
     await AppSettings.setMonthlySpendingLimit(_monthlySpendingLimit);
-    await BackupSyncService.instance.backupIfEnabled();
 
     if (!mounted) {
       return;
@@ -147,208 +138,99 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _signInToGoogle() async {
-    if (!BackupSyncService.instance.isSupportedPlatform) {
-      _showMessage('Google Drive backup is available on Android, iOS, and macOS.');
+  Future<void> _savePreferences() async {
+    FocusScope.of(context).unfocus();
+
+    setState(() => _isPreferencesSaving = true);
+    await AppSettings.setCurrency(_selectedCurrency);
+    await AppSettings.setMonthlySpendingLimit(_monthlySpendingLimit);
+
+    if (!mounted) {
       return;
     }
 
-    setState(() => _isSyncing = true);
+    setState(() => _isPreferencesSaving = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Preferences saved.')),
+    );
+  }
+
+  Future<void> _importCsvData() async {
+    setState(() => _isImportingCsv = true);
 
     try {
-      final account = await BackupSyncService.instance.signIn();
-      if (!mounted) {
-        return;
-      }
+      final file = await openFile(
+        acceptedTypeGroups: const <XTypeGroup>[
+          XTypeGroup(
+            label: 'CSV',
+            extensions: <String>['csv'],
+          ),
+        ],
+      );
 
-      if (account == null) {
-        _showMessage('Google sign-in was cancelled.');
-        setState(() => _isSyncing = false);
-        return;
-      }
-
-      final shouldPrefillName = _nameController.text.trim().isEmpty && (account.displayName?.trim().isNotEmpty ?? false);
-      if (shouldPrefillName) {
-        _nameController.text = account.displayName!.trim();
-      }
-
-      setState(() {
-        _googleAccount = account;
-      });
-
-      final hasRemoteBackup = await BackupSyncService.instance.hasRemoteBackup();
-      if (!mounted) {
-        return;
-      }
-
-      if (hasRemoteBackup) {
-        final shouldRestore = await _showRestoreDialog(
-          title: 'Restore your Drive backup?',
-          message: 'We found a backup for ${account.email}. Restoring will replace the current data on this device.',
-        );
-        if (shouldRestore && mounted) {
-          await _restoreFromDrive();
-        }
-      } else if (_backupEnabled) {
-        await BackupSyncService.instance.uploadBackup();
+      if (file == null) {
         if (mounted) {
-          _showMessage('Initial Google Drive backup completed.');
+          setState(() => _isImportingCsv = false);
         }
-      }
-    } catch (error) {
-      if (mounted) {
-        _showMessage('Google sign-in failed. Check your Google configuration and try again.');
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isSyncing = false);
-      }
-    }
-  }
-
-  Future<void> _signOutFromGoogle() async {
-    setState(() => _isSyncing = true);
-    await BackupSyncService.instance.signOut();
-    await AppSettings.setBackupEnabled(false);
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _googleAccount = null;
-      _backupEnabled = false;
-      _isSyncing = false;
-    });
-    _showMessage('Google Drive backup has been disconnected.');
-  }
-
-  Future<void> _toggleBackup(bool enabled) async {
-    if (enabled && _googleAccount == null) {
-      await _signInToGoogle();
-      if (_googleAccount == null) {
-        return;
-      }
-    }
-
-    setState(() => _isSyncing = true);
-    await AppSettings.setBackupEnabled(enabled);
-
-    if (enabled) {
-      final hasRemoteBackup = await BackupSyncService.instance.hasRemoteBackup();
-      if (!mounted) {
         return;
       }
 
-      if (hasRemoteBackup) {
-        final shouldRestore = await _showRestoreDialog(
-          title: 'Use existing backup?',
-          message: 'A Drive backup already exists for this Google account. Restore that backup now, or keep your current data and upload it instead.',
-          confirmLabel: 'Restore',
-        );
+      final csv = await file.readAsString();
+      final parsedTransactions = TransactionCsvService.parseTransactions(csv);
 
-        if (shouldRestore) {
-          await _restoreFromDrive(showSuccessMessage: true);
-        } else {
-          await BackupSyncService.instance.uploadBackup();
-          if (mounted) {
-            _showMessage('Current data backed up to Google Drive.');
-          }
-        }
-      } else {
-        await BackupSyncService.instance.uploadBackup();
+      if (parsedTransactions.isEmpty) {
+        _showMessage('No valid transactions were found in that CSV file.');
         if (mounted) {
-          _showMessage('Google Drive backup is now enabled.');
+          setState(() => _isImportingCsv = false);
         }
-      }
-    } else {
-      _showMessage('Automatic backup disabled.');
-    }
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _backupEnabled = enabled;
-      _isSyncing = false;
-    });
-  }
-
-  Future<void> _backupNow() async {
-    if (_googleAccount == null) {
-      await _signInToGoogle();
-      if (_googleAccount == null) {
         return;
       }
-    }
 
-    setState(() => _isSyncing = true);
-    final success = await BackupSyncService.instance.uploadBackup();
-    if (!mounted) {
-      return;
-    }
+      final transactionBox = Hive.box<Transaction>('transactions');
+      final existingIds = transactionBox.values.map((item) => item.id).toSet();
 
-    setState(() => _isSyncing = false);
-    _showMessage(success ? 'Backup uploaded to Google Drive.' : 'Unable to create backup right now.');
-  }
+      var importedCount = 0;
+      var skippedCount = 0;
+      final importedIds = <String>[];
 
-  Future<void> _restoreFromDrive({bool showSuccessMessage = false}) async {
-    setState(() => _isSyncing = true);
+      for (final transaction in parsedTransactions) {
+        if (existingIds.contains(transaction.id)) {
+          skippedCount++;
+          continue;
+        }
 
-    try {
-      final restored = await BackupSyncService.instance.restoreBackup();
+        await transactionBox.add(transaction);
+        existingIds.add(transaction.id);
+        importedIds.add(transaction.id);
+        importedCount++;
+      }
+
+      if (importedIds.isNotEmpty) {
+        await ImportHistoryManager.addImportRecord(
+          importedIds.length,
+          'csv',
+          importedIds,
+          skippedCount,
+        );
+      }
+
       if (!mounted) {
         return;
       }
 
-      if (restored) {
-        _loadSettings();
-        setState(() {});
-        if (showSuccessMessage) {
-          _showMessage('Backup restored from Google Drive.');
-        }
-      } else {
-        _showMessage('No backup was found on Google Drive.');
-      }
+      final message = importedCount == 0
+          ? 'All CSV transactions were already imported.'
+          : 'Imported $importedCount transaction${importedCount == 1 ? '' : 's'} from CSV${skippedCount > 0 ? ' ($skippedCount duplicate${skippedCount == 1 ? '' : 's'} skipped)' : ''}.';
+      _showMessage(message);
     } catch (_) {
       if (mounted) {
-        _showMessage('Backup restore failed. Please try again.');
+        _showMessage('CSV import failed. Please choose a valid export file.');
       }
     } finally {
       if (mounted) {
-        setState(() => _isSyncing = false);
+        setState(() => _isImportingCsv = false);
       }
     }
-  }
-
-  Future<bool> _showRestoreDialog({
-    required String title,
-    required String message,
-    String confirmLabel = 'Restore',
-  }) async {
-    final decision = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF10182E),
-          title: Text(title),
-          content: Text(message),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Not now'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(confirmLabel),
-            ),
-          ],
-        );
-      },
-    );
-
-    return decision ?? false;
   }
 
   void _showMessage(String message) {
@@ -376,53 +258,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return DateFormat('dd MMM yyyy').format(_selectedDob!);
   }
 
-  String _lastBackupLabel() {
-    final lastSync = AppSettings.getBackupLastSyncedAt();
-    if (lastSync == null) {
-      return 'No cloud backup yet';
-    }
-    return 'Last backup: ${DateFormat('dd MMM yyyy, hh:mm a').format(lastSync)}';
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDriveSupported = BackupSyncService.instance.isSupportedPlatform;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D1124),
-      body: _isInitializing
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-              children: [
-                _buildAccountHero(theme),
-                const SizedBox(height: 16),
-                _buildProfileSection(theme),
-                const SizedBox(height: 16),
-                _buildBackupSection(theme, isDriveSupported),
-                const SizedBox(height: 16),
-                _buildPreferencesSection(theme),
-              ],
-            ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        children: [
+          _buildAccountHero(theme),
+          const SizedBox(height: 16),
+          _buildProfileSection(theme),
+          const SizedBox(height: 16),
+          _buildImportSection(theme),
+          const SizedBox(height: 16),
+          _buildPreferencesSection(theme),
+        ],
+      ),
     );
   }
 
   Widget _buildAccountHero(ThemeData theme) {
     final imageBytes = _profileImageBytes;
-    final googlePhoto = _googleAccount?.photoUrl;
     ImageProvider<Object>? avatarImage;
     if (imageBytes != null) {
       avatarImage = MemoryImage(imageBytes);
-    } else if (googlePhoto != null && googlePhoto.isNotEmpty) {
-      avatarImage = NetworkImage(googlePhoto);
     }
     final displayName = _nameController.text.trim().isNotEmpty
         ? _nameController.text.trim()
-        : (_googleAccount?.displayName ?? 'Your Finance Vault');
-    final subtitle = _googleAccount?.email.isNotEmpty == true
-        ? _googleAccount!.email
-        : 'Add your profile details and connect Google Drive backup';
+        : 'Your Finance Vault';
+    const subtitle = 'Add your profile details and manage your local data.';
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -447,10 +313,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               radius: 34,
               backgroundColor: const Color(0xFF6AA8FF),
               backgroundImage: avatarImage,
-              child: imageBytes == null && (googlePhoto == null || googlePhoto.isEmpty)
+              child: imageBytes == null
                   ? Text(
-                      displayName.isEmpty ? 'U' : displayName.characters.first.toUpperCase(),
-                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                      displayName.isEmpty
+                          ? 'U'
+                          : displayName.characters.first.toUpperCase(),
+                      style: const TextStyle(
+                          fontSize: 24, fontWeight: FontWeight.bold),
                     )
                   : null,
             ),
@@ -480,13 +349,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   spacing: 10,
                   runSpacing: 10,
                   children: [
-                    FilledButton.icon(
-                      onPressed: _isSyncing ? null : _signInToGoogle,
-                      icon: const Icon(Icons.login_rounded),
-                      label: Text(_googleAccount == null ? 'Login with Google' : 'Switch account'),
-                    ),
                     OutlinedButton.icon(
-                      onPressed: _isSyncing ? null : _pickProfileImage,
+                      onPressed: _pickProfileImage,
                       icon: const Icon(Icons.photo_camera_back_outlined),
                       label: const Text('Profile photo'),
                     ),
@@ -503,7 +367,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildProfileSection(ThemeData theme) {
     return _SettingsCard(
       title: 'Profile',
-      subtitle: 'Store the personal details that should travel with your backup.',
+      subtitle: 'Store the personal details you want to keep in the app.',
       child: Column(
         children: [
           TextField(
@@ -586,69 +450,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildBackupSection(ThemeData theme, bool isDriveSupported) {
-    final connectedEmail = _googleAccount?.email.isNotEmpty == true
-        ? _googleAccount!.email
-        : AppSettings.getBackupAccountEmail();
-
-    return _SettingsCard(
-      title: 'Cloud Backup',
-      subtitle: 'Optional Google Drive sync that behaves like a personal vault backup.',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            value: _backupEnabled,
-            onChanged: _isSyncing || !isDriveSupported ? null : _toggleBackup,
-            title: const Text('Enable Google Drive backup'),
-            subtitle: Text(
-              isDriveSupported
-                  ? 'When enabled, your latest transactions and profile can be backed up and restored.'
-                  : 'This device cannot use Google Drive backup.',
-            ),
-          ),
-          const Divider(color: Colors.white12),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.cloud_done_outlined),
-            title: Text(connectedEmail.isEmpty ? 'Not connected' : connectedEmail),
-            subtitle: Text(_lastBackupLabel()),
-            trailing: connectedEmail.isNotEmpty
-                ? TextButton(
-                    onPressed: _isSyncing ? null : _signOutFromGoogle,
-                    child: const Text('Logout'),
-                  )
-                : null,
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              FilledButton.icon(
-                onPressed: _isSyncing || !isDriveSupported ? null : _backupNow,
-                icon: const Icon(Icons.cloud_upload_outlined),
-                label: Text(_isSyncing ? 'Working...' : 'Back up now'),
-              ),
-              OutlinedButton.icon(
-                onPressed: _isSyncing || !isDriveSupported || _googleAccount == null
-                    ? null
-                    : () => _restoreFromDrive(showSuccessMessage: true),
-                icon: const Icon(Icons.cloud_download_outlined),
-                label: const Text('Restore backup'),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildPreferencesSection(ThemeData theme) {
     return _SettingsCard(
       title: 'Preferences',
-      subtitle: 'Keep the app display choices aligned with your profile backup.',
+      subtitle: 'Keep the app display choices aligned with your preferences.',
       child: Column(
         children: [
           DropdownButtonFormField<String>(
@@ -660,7 +465,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             items: _currencyOptions.map((currency) {
               return DropdownMenuItem<String>(
                 value: currency,
-                child: Text('$currency (${AppSettings.currencySymbol(currency)})'),
+                child:
+                    Text('$currency (${AppSettings.currencySymbol(currency)})'),
               );
             }).toList(),
             onChanged: (value) {
@@ -672,7 +478,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 14),
           TextFormField(
-            initialValue: _monthlySpendingLimit == 0 ? '' : _monthlySpendingLimit.toString(),
+            initialValue: _monthlySpendingLimit == 0
+                ? ''
+                : _monthlySpendingLimit.toString(),
             decoration: const InputDecoration(
               labelText: 'Monthly Spending Limit',
               prefixIcon: Icon(Icons.account_balance_wallet_rounded),
@@ -682,6 +490,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
               final limit = double.tryParse(value) ?? 0.0;
               setState(() => _monthlySpendingLimit = limit);
             },
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _isPreferencesSaving ? null : _savePreferences,
+              icon: _isPreferencesSaving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save_outlined),
+              label:
+                  Text(_isPreferencesSaving ? 'Saving...' : 'Save preferences'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImportSection(ThemeData theme) {
+    return _SettingsCard(
+      title: 'Data Import',
+      subtitle:
+          'Import transactions from a CSV file created by the app export.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'CSV import adds transactions from the selected file and skips rows that were already imported with the same ID.',
+            style: TextStyle(color: Colors.white70, height: 1.4),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _isImportingCsv ? null : _importCsvData,
+              icon: _isImportingCsv
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.upload_file_rounded),
+              label: Text(_isImportingCsv ? 'Importing...' : 'Import CSV'),
+            ),
           ),
         ],
       ),

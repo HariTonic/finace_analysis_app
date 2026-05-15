@@ -6,11 +6,17 @@ import '../models/transaction.dart';
 import '../utils/app_settings.dart';
 import '../utils/export_helper.dart';
 import '../utils/notification_service.dart';
+import '../utils/transaction_csv_service.dart';
 import '../widgets/running_text.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder(
@@ -42,22 +48,17 @@ class HomeScreen extends StatelessWidget {
               final tMonth = DateTime(t.date.year, t.date.month);
               return tMonth == currentMonth;
             }).toList();
-            final monthlyIncome = currentMonthTransactions
-                .where((t) => t.type == 'income')
-                .fold(0.0, (sum, t) => sum + t.amount);
             final monthlyExpense = currentMonthTransactions
                 .where((t) => t.type == 'expense')
                 .fold(0.0, (sum, t) => sum + t.amount);
             final monthlyLimit = AppSettings.getMonthlySpendingLimit();
 
-            // Progress bar: based on income, decreases with spending
-            double progressValue = 1.0;
-            if (monthlyIncome > 0) {
-              progressValue = (monthlyIncome - monthlyExpense) / monthlyIncome;
-              progressValue = progressValue.clamp(0.0, 1.0);
+            // Progress bar: shows remaining monthly limit
+            double progressValue = 0.0;
+            if (monthlyLimit > 0) {
+              progressValue = ((monthlyLimit - monthlyExpense) / monthlyLimit)
+                  .clamp(0.0, 1.0);
             }
-            Color progressColor =
-                Color.lerp(Colors.yellow, Colors.green, progressValue)!;
 
             // Check for notifications
             if (monthlyLimit > 0) {
@@ -100,11 +101,7 @@ class HomeScreen extends StatelessWidget {
             }
 
             Future<void> _exportData() async {
-              String csv = 'ID,Amount,Category,Date,Type,Notes\n';
-              for (var t in transactions) {
-                csv +=
-                    '${t.id},${t.amount},${t.category},${t.date.toIso8601String()},${t.type},${t.notes}\n';
-              }
+              final csv = TransactionCsvService.buildCsv(transactions);
               final path = await saveExportData(csv);
 
               ScaffoldMessenger.of(context).showSnackBar(
@@ -135,106 +132,95 @@ class HomeScreen extends StatelessWidget {
                                 Text(formatAmount(balance),
                                     style: const TextStyle(
                                         fontSize: 18, color: Colors.white70)),
-                                const SizedBox(height: 8),
-                                Container(
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[800],
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(4),
-                                    child: Stack(
-                                      children: [
-                                        Container(
-                                          decoration: BoxDecoration(
-                                            gradient: LinearGradient(
-                                              colors: [
-                                                Colors.yellow[600]!,
-                                                Colors.green[600]!,
-                                              ],
-                                              begin: Alignment.centerLeft,
-                                              end: Alignment.centerRight,
-                                            ),
-                                          ),
-                                        ),
-                                        Align(
-                                          alignment: Alignment.centerLeft,
-                                          child: FractionallySizedBox(
-                                            widthFactor: progressValue,
-                                            heightFactor: 1,
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                gradient: LinearGradient(
-                                                  colors: [
-                                                    Colors.yellow[600]!,
-                                                    Colors.green[600]!,
-                                                  ],
-                                                  begin: Alignment.centerLeft,
-                                                  end: Alignment.centerRight,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    Text(headerDate,
-                                        style: const TextStyle(
-                                            color: Colors.grey)),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 10, vertical: 6),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF2A2A3F),
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      child: SizedBox(
-                                        width: 110,
-                                        child: RunningText(
-                                          pendingLabel,
-                                          style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 12,
-                                              letterSpacing: 0.5),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
                               ],
                             ),
                           ),
+                          const SizedBox(width: 16),
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.pushNamed(context, '/settings');
+                            },
+                            child: Container(
+                              width: 64,
+                              height: 64,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2A2A3F),
+                                shape: BoxShape.circle,
+                                image: AppSettings.getProfileImageBase64()
+                                        .isNotEmpty
+                                    ? DecorationImage(
+                                        image: MemoryImage(
+                                          base64Decode(
+                                            AppSettings.getProfileImageBase64(),
+                                          ),
+                                        ),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
+                              ),
+                              child: AppSettings.getProfileImageBase64().isEmpty
+                                  ? const Icon(
+                                      Icons.person,
+                                      color: Colors.white,
+                                      size: 28,
+                                    )
+                                  : null,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        height: 8,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[800],
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: FractionallySizedBox(
+                              widthFactor: progressValue,
+                              heightFactor: 1,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.yellow[600]!,
+                                      Colors.green[600]!,
+                                    ],
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Text(headerDate,
+                              style: const TextStyle(color: Colors.grey)),
+                          const SizedBox(width: 8),
                           Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
                             decoration: BoxDecoration(
                               color: const Color(0xFF2A2A3F),
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(20),
                             ),
-                            padding: const EdgeInsets.all(10),
-                            child: GestureDetector(
-                              onTap: () {
-                                Navigator.pushNamed(context, '/settings');
-                              },
-                              child: CircleAvatar(
-                                radius: 22,
-                                backgroundColor: Colors.transparent,
-                                backgroundImage: AppSettings
-                                            .getProfileImageBase64()
-                                        .isNotEmpty
-                                    ? MemoryImage(base64Decode(
-                                        AppSettings.getProfileImageBase64()))
-                                    : null,
-                                child:
-                                    AppSettings.getProfileImageBase64().isEmpty
-                                        ? const Icon(Icons.person,
-                                            color: Colors.white)
-                                        : null,
+                            child: SizedBox(
+                              width: 110,
+                              child: RunningText(
+                                pendingLabel,
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    letterSpacing: 0.5),
                               ),
                             ),
                           ),
@@ -301,21 +287,25 @@ class HomeScreen extends StatelessWidget {
                                 ],
                               ),
                             const SizedBox(height: 24),
-                            ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF7A85FF),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 24, vertical: 16),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16)),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF7A85FF),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 24, vertical: 16),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16)),
+                                ),
+                                onPressed: () {
+                                  Navigator.pushNamed(context, '/add-expense');
+                                },
+                                icon:
+                                    const Icon(Icons.add, color: Colors.white),
+                                label: const Text('Add Expense Now',
+                                    style: TextStyle(
+                                        color: Colors.white, fontSize: 16)),
                               ),
-                              onPressed: () {
-                                Navigator.pushNamed(context, '/add-expense');
-                              },
-                              icon: const Icon(Icons.add, color: Colors.white),
-                              label: const Text('Add Expense Now',
-                                  style: TextStyle(
-                                      color: Colors.white, fontSize: 16)),
                             ),
                           ],
                         ),
@@ -338,6 +328,34 @@ class HomeScreen extends StatelessWidget {
                               child: _buildActionCard(context, Icons.show_chart,
                                   'Add Investment', '/add-investment')),
                         ],
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF7A85FF),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: () async {
+                            final result = await Navigator.pushNamed(
+                              context,
+                              '/extract-sms',
+                            );
+                            if (result == true) {
+                              // Refresh the home screen if transactions were imported
+                              setState(() {});
+                            }
+                          },
+                          icon: const Icon(Icons.sms, color: Colors.white),
+                          label: const Text(
+                            'Import from Messages',
+                            style: TextStyle(color: Colors.white, fontSize: 14),
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 24),
                       const Text('Recent Transactions',
