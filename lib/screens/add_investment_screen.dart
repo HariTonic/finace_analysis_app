@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
 
 import '../models/investment_holding.dart';
 import '../models/transaction.dart';
@@ -29,8 +33,28 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
   _InvestmentType _selectedType = _InvestmentType.stocks;
   DateTime _purchaseDate = DateTime.now();
 
+  // Stock search/autocomplete (Dart-only, direct NSE requests)
+  final http.Client _httpClient = http.Client();
+  final Map<String, String> _nseHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) '
+        'Chrome/124.0.0.0 Safari/537.36',
+    'Accept': '*/*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Referer': 'https://www.nseindia.com/',
+    'Connection': 'keep-alive',
+  };
+  List<Map<String, dynamic>> _stockSuggestions = [];
+  Timer? _stockDebounce;
+  bool _isFetchingSuggestions = false;
+  bool _isFetchingPrice = false;
+  String? _selectedSymbol;
+  bool _nseSessionReady = false;
+  final Map<String, String> _cookies = {};
+
   @override
   void dispose() {
+    _stockDebounce?.cancel();
     _stockNameController.dispose();
     _otherNameController.dispose();
     _quantityController.dispose();
@@ -65,6 +89,133 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
   void initState() {
     super.initState();
     _populateForEdit();
+    // initialize NSE session and cookies
+    _initNseSession();
+  }
+
+  Future<void> _initNseSession() async {
+    try {
+      // Prime NSE session/cookies similar to the Python approach
+      final resp = await _httpClient.get(Uri.parse('https://www.nseindia.com'), headers: _nseHeaders).timeout(const Duration(seconds: 8));
+      _updateCookiesFromResponse(resp);
+      // give server a small pause
+      await Future.delayed(const Duration(milliseconds: 400));
+      _nseSessionReady = true;
+    } catch (_) {
+      _nseSessionReady = false;
+    }
+  }
+
+  void _updateCookiesFromResponse(http.Response resp) {
+    final setCookie = resp.headers['set-cookie'];
+    if (setCookie == null || setCookie.isEmpty) return;
+    // split on comma followed by space to separate cookies
+    final parts = setCookie.split(RegExp(r',\s*(?=[^;]+=)'));
+    for (final part in parts) {
+      final cookiePair = part.split(';').firstWhere((e) => e.contains('='), orElse: () => '');
+      if (cookiePair.isEmpty) continue;
+      final kv = cookiePair.split('=');
+      if (kv.length >= 2) {
+        final name = kv[0].trim();
+        final value = kv.sublist(1).join('=');
+        _cookies[name] = value;
+      }
+    }
+  }
+
+  String _cookieHeaderValue() {
+    return _cookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
+  }
+
+  Future<void> _fetchStockSuggestions(String query) async {
+    if (query.trim().isEmpty) {
+      setState(() {
+        _stockSuggestions = [];
+        _isFetchingSuggestions = false;
+      });
+      return;
+    }
+    setState(() => _isFetchingSuggestions = true);
+    try {
+      if (!_nseSessionReady) await _initNseSession();
+      final uri = Uri.parse('https://www.nseindia.com/api/search/autocomplete?q=${Uri.encodeComponent(query)}');
+      final headers = Map<String, String>.from(_nseHeaders);
+      final cookieVal = _cookieHeaderValue();
+      if (cookieVal.isNotEmpty) headers['cookie'] = cookieVal;
+      final resp = await _httpClient.get(uri, headers: headers).timeout(const Duration(seconds: 8));
+      _updateCookiesFromResponse(resp);
+      // debug logging
+      if (resp.statusCode != 200) {
+        // print returned body for debugging blocking/HTML responses
+        // ignore: avoid_print
+        print('NSE suggestions status: ${resp.statusCode}');
+        // ignore: avoid_print
+        print(resp.body.substring(0, resp.body.length.clamp(0, 600)));
+      }
+      if (resp.statusCode != 200) {
+        setState(() {
+          _stockSuggestions = [];
+          _isFetchingSuggestions = false;
+        });
+        return;
+      }
+      final Map<String, dynamic> data = jsonDecode(resp.body);
+      final List symbols = data['symbols'] ?? [];
+      final results = symbols.map((s) => {
+            'symbol': s['symbol'],
+            'company': s['symbol_info'],
+            'instrument': s['instrument'],
+            'series': s['series'],
+          }).toList();
+      setState(() {
+        _stockSuggestions = List<Map<String, dynamic>>.from(results);
+        _isFetchingSuggestions = false;
+      });
+    } catch (e) {
+      setState(() {
+        _stockSuggestions = [];
+        _isFetchingSuggestions = false;
+      });
+    }
+  }
+
+  Future<void> _fetchStockPrice(String symbol) async {
+    if (symbol.trim().isEmpty) return;
+    setState(() => _isFetchingPrice = true);
+    try {
+      if (!_nseSessionReady) await _initNseSession();
+      final uri = Uri.parse('https://www.nseindia.com/api/quote-equity?symbol=${Uri.encodeComponent(symbol)}');
+      final headers = Map<String, String>.from(_nseHeaders);
+      final cookieVal = _cookieHeaderValue();
+      if (cookieVal.isNotEmpty) headers['cookie'] = cookieVal;
+      final resp = await _httpClient.get(uri, headers: headers).timeout(const Duration(seconds: 8));
+      _updateCookiesFromResponse(resp);
+      if (resp.statusCode != 200) {
+        // ignore: avoid_print
+        print('NSE price status: ${resp.statusCode}');
+        // ignore: avoid_print
+        print(resp.body.substring(0, resp.body.length.clamp(0, 600)));
+        setState(() => _isFetchingPrice = false);
+        return;
+      }
+      final Map<String, dynamic> data = jsonDecode(resp.body);
+      final priceInfo = data['priceInfo'] ?? {};
+      final dynamic lastPrice = priceInfo['lastPrice'] ?? priceInfo['last_price'] ?? priceInfo['last'];
+      if (lastPrice != null) {
+        setState(() => _currentPriceController.text = lastPrice.toString());
+      }
+    } catch (_) {
+      // ignore
+    } finally {
+      setState(() => _isFetchingPrice = false);
+    }
+  }
+
+  void _onStockQueryChanged(String query) {
+    _stockDebounce?.cancel();
+    _stockDebounce = Timer(const Duration(milliseconds: 350), () {
+      _fetchStockSuggestions(query);
+    });
   }
 
   @override
@@ -325,14 +476,61 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
   }
 
   Widget _buildStockNameField() {
-    return TextField(
-      controller: _stockNameController,
-      style: const TextStyle(color: Colors.white),
-      decoration: const InputDecoration(
-        labelText: 'Stock name',
-        prefixIcon: Icon(Icons.badge_outlined),
-      ),
-      onChanged: (_) => setState(() {}),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _stockNameController,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            labelText: 'Stock name or symbol',
+            prefixIcon: Icon(Icons.badge_outlined),
+          ),
+          onChanged: (v) {
+            _selectedSymbol = null;
+            _onStockQueryChanged(v);
+            setState(() {});
+          },
+        ),
+        const SizedBox(height: 8),
+        if (_isFetchingSuggestions)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8.0),
+            child: LinearProgressIndicator(),
+          ),
+        if (_stockSuggestions.isNotEmpty)
+          Container(
+            constraints: const BoxConstraints(maxHeight: 220),
+            margin: const EdgeInsets.only(top: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0E1528),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: _stockSuggestions.length,
+              separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white10),
+              itemBuilder: (context, index) {
+                final item = _stockSuggestions[index];
+                final symbol = (item['symbol'] ?? '').toString();
+                final company = (item['company'] ?? '').toString();
+                return ListTile(
+                  title: Text(company, style: const TextStyle(color: Colors.white)),
+                  subtitle: Text(symbol, style: const TextStyle(color: Colors.white70)),
+                  onTap: () async {
+                    _selectedSymbol = symbol;
+                    _stockNameController.text = company;
+                    setState(() {
+                      _stockSuggestions = [];
+                    });
+                    await _fetchStockPrice(symbol);
+                  },
+                );
+              },
+            ),
+          ),
+      ],
     );
   }
 
@@ -465,7 +663,7 @@ class _AddInvestmentScreenState extends State<AddInvestmentScreen> {
       _InvestmentType.gold => 'Gold',
       _InvestmentType.other => _otherNameController.text.trim(),
     };
-    final symbol = '';
+    final symbol = _selectedSymbol ?? '';
     final exchange = '';
     final unitLabel = switch (_selectedType) {
       _InvestmentType.stocks => 'stocks',
