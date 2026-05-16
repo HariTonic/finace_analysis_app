@@ -8,9 +8,7 @@ import '../models/investment_holding.dart';
 import '../models/transaction.dart';
 import '../utils/app_settings.dart';
 import '../utils/backup_sync_service.dart';
-import '../utils/export_helper.dart';
 import '../utils/notification_service.dart';
-import '../utils/transaction_csv_service.dart';
 import '../widgets/running_text.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -109,14 +107,7 @@ class _HomeScreenState extends State<HomeScreen> {
               return '$sign${AppSettings.currencySymbol(activeCurrency)}${value.abs().toStringAsFixed(2)}';
             }
 
-            Future<void> _exportData() async {
-              final csv = TransactionCsvService.buildCsv(transactions);
-              final path = await saveExportData(csv);
 
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Data exported as CSV to $path')),
-              );
-            }
 
             return Container(
               color: const Color(0xFF0D1124),
@@ -295,27 +286,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                 ],
                               ),
-                            const SizedBox(height: 24),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF7A85FF),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 24, vertical: 16),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16)),
-                                ),
-                                onPressed: () {
-                                  Navigator.pushNamed(context, '/add-expense');
-                                },
-                                icon:
-                                    const Icon(Icons.add, color: Colors.white),
-                                label: const Text('Add Expense Now',
-                                    style: TextStyle(
-                                        color: Colors.white, fontSize: 16)),
-                              ),
-                            ),
+
                           ],
                         ),
                       ),
@@ -470,54 +441,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 18),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: ElevatedButton.icon(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF2A2A3F),
-                                      disabledBackgroundColor:
-                                          Colors.grey.shade700,
-                                      disabledForegroundColor: Colors.white70,
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 16),
-                                      shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(16)),
-                                    ),
-                                    onPressed: transactions.isEmpty
-                                        ? null
-                                        : _exportData,
-                                    icon: const Icon(Icons.upload,
-                                        color: Colors.white),
-                                    label: const Text('Export',
-                                        style: TextStyle(color: Colors.white)),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: ElevatedButton.icon(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF7A85FF),
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 16),
-                                      shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(16)),
-                                    ),
-                                    onPressed: () {
-                                      Navigator.pushNamed(
-                                          context, '/add-expense');
-                                    },
-                                    icon: const Icon(Icons.add,
-                                        color: Colors.white),
-                                    label: const Text('Quick Entry',
-                                        style: TextStyle(color: Colors.white)),
-                                  ),
-                                ),
-                              ],
-                            ),
+
                           ],
                         ),
                       ),

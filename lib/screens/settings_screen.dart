@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,8 +8,6 @@ import 'package:intl/intl.dart';
 
 import '../models/transaction.dart';
 import '../utils/app_settings.dart';
-import '../utils/import_history.dart';
-import '../utils/transaction_csv_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -37,7 +34,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   DateTime? _selectedDob;
   bool _isProfileSaving = false;
   bool _isPreferencesSaving = false;
-  bool _isImportingCsv = false;
   double _monthlySpendingLimit = 0.0;
 
   @override
@@ -155,84 +151,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _importCsvData() async {
-    setState(() => _isImportingCsv = true);
-
-    try {
-      final file = await openFile(
-        acceptedTypeGroups: const <XTypeGroup>[
-          XTypeGroup(
-            label: 'CSV',
-            extensions: <String>['csv'],
-          ),
-        ],
-      );
-
-      if (file == null) {
-        if (mounted) {
-          setState(() => _isImportingCsv = false);
-        }
-        return;
-      }
-
-      final csv = await file.readAsString();
-      final parsedTransactions = TransactionCsvService.parseTransactions(csv);
-
-      if (parsedTransactions.isEmpty) {
-        _showMessage('No valid transactions were found in that CSV file.');
-        if (mounted) {
-          setState(() => _isImportingCsv = false);
-        }
-        return;
-      }
-
-      final transactionBox = Hive.box<Transaction>('transactions');
-      final existingIds = transactionBox.values.map((item) => item.id).toSet();
-
-      var importedCount = 0;
-      var skippedCount = 0;
-      final importedIds = <String>[];
-
-      for (final transaction in parsedTransactions) {
-        if (existingIds.contains(transaction.id)) {
-          skippedCount++;
-          continue;
-        }
-
-        await transactionBox.add(transaction);
-        existingIds.add(transaction.id);
-        importedIds.add(transaction.id);
-        importedCount++;
-      }
-
-      if (importedIds.isNotEmpty) {
-        await ImportHistoryManager.addImportRecord(
-          importedIds.length,
-          'csv',
-          importedIds,
-          skippedCount,
-        );
-      }
-
-      if (!mounted) {
-        return;
-      }
-
-      final message = importedCount == 0
-          ? 'All CSV transactions were already imported.'
-          : 'Imported $importedCount transaction${importedCount == 1 ? '' : 's'} from CSV${skippedCount > 0 ? ' ($skippedCount duplicate${skippedCount == 1 ? '' : 's'} skipped)' : ''}.';
-      _showMessage(message);
-    } catch (_) {
-      if (mounted) {
-        _showMessage('CSV import failed. Please choose a valid export file.');
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isImportingCsv = false);
-      }
-    }
-  }
-
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
@@ -271,11 +189,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 16),
           _buildProfileSection(theme),
           const SizedBox(height: 16),
-          _buildBackupSection(theme),
-          const SizedBox(height: 16),
-          _buildImportSection(theme),
-          const SizedBox(height: 16),
           _buildPreferencesSection(theme),
+          const SizedBox(height: 16),
+          _buildBackupSection(theme),
         ],
       ),
     );
@@ -507,38 +423,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   : const Icon(Icons.save_outlined),
               label:
                   Text(_isPreferencesSaving ? 'Saving...' : 'Save preferences'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildImportSection(ThemeData theme) {
-    return _SettingsCard(
-      title: 'Data Import',
-      subtitle:
-          'Import transactions from a CSV file created by the app export.',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'CSV import adds transactions from the selected file and skips rows that were already imported with the same ID.',
-            style: TextStyle(color: Colors.white70, height: 1.4),
-          ),
-          const SizedBox(height: 18),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _isImportingCsv ? null : _importCsvData,
-              icon: _isImportingCsv
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.upload_file_rounded),
-              label: Text(_isImportingCsv ? 'Importing...' : 'Import CSV'),
             ),
           ),
         ],

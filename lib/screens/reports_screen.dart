@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -17,8 +18,6 @@ class ReportsScreen extends StatefulWidget {
 
 class _ReportsScreenState extends State<ReportsScreen> {
   _ReportTimeframe _selectedTimeframe = _ReportTimeframe.currentMonth;
-  _ChartDisplay _balanceChartDisplay = _ChartDisplay.pie;
-  _ChartDisplay _expenseChartDisplay = _ChartDisplay.bar;
   _ReportSection _selectedSection = _ReportSection.balanceMix;
 
   late _DateRange _expenseCompareA;
@@ -227,7 +226,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final summary = _BalanceSummary.fromTransactions(rangeTransactions);
     final chartItems = summary.toChartItems();
     final totalTracked = summary.totalTracked;
-    final maxY = chartItems.fold<double>(0, (current, item) => math.max(current, item.amount));
 
     return _ReportCard(
       title: 'Balance Mix',
@@ -235,11 +233,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildChartToggle(
-            value: _balanceChartDisplay,
-            onChanged: (value) => setState(() => _balanceChartDisplay = value),
-          ),
-          const SizedBox(height: 18),
           LayoutBuilder(
             builder: (context, constraints) {
               final stacked = constraints.maxWidth < 860;
@@ -247,80 +240,53 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 height: 260,
                 child: totalTracked <= 0
                     ? const _EmptyChart(message: 'No expense, investment, or balance data for this timeframe.')
-                    : _balanceChartDisplay == _ChartDisplay.pie
-                        ? PieChart(
+                    : Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          PieChart(
                             PieChartData(
-                              sectionsSpace: 4,
-                              centerSpaceRadius: 54,
+                              sectionsSpace: 2,
+                              centerSpaceRadius: 80,
+                              startDegreeOffset: -90,
                               sections: chartItems.map((item) {
                                 final percentage = totalTracked == 0 ? 0.0 : (item.amount / totalTracked) * 100;
-                              return PieChartSectionData(
-                                value: item.amount,
-                                gradient: item.gradient,
-                                radius: 76,
-                                title: '${percentage.toStringAsFixed(1)}%',
-                                titleStyle: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 12,
+                                return PieChartSectionData(
+                                  value: item.amount,
+                                  gradient: item.gradient,
+                                  radius: 60,
+                                  badgeWidget: _PieChartBadge(
+                                    percentage: percentage,
                                   ),
+                                  badgePositionPercentageOffset: 1.15,
                                 );
                               }).toList(),
                             ),
-                          )
-                        : BarChart(
-                            BarChartData(
-                              alignment: BarChartAlignment.spaceAround,
-                              maxY: maxY == 0 ? 10 : maxY * 1.25,
-                              gridData: FlGridData(
-                                show: true,
-                                drawVerticalLine: false,
-                                horizontalInterval: maxY == 0 ? 2 : maxY / 4,
-                                getDrawingHorizontalLine: (_) => const FlLine(
-                                  color: Colors.white10,
-                                  strokeWidth: 1,
-                                ),
-                              ),
-                              borderData: FlBorderData(show: false),
-                              titlesData: FlTitlesData(
-                                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                                leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                                bottomTitles: AxisTitles(
-                                  sideTitles: SideTitles(
-                                    showTitles: true,
-                                    getTitlesWidget: (value, meta) {
-                                      final index = value.toInt();
-                                      if (index < 0 || index >= chartItems.length) {
-                                        return const SizedBox.shrink();
-                                      }
-                                      return Padding(
-                                        padding: const EdgeInsets.only(top: 10),
-                                        child: Text(
-                                          chartItems[index].shortLabel,
-                                          style: const TextStyle(color: Colors.white70, fontSize: 12),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                              barGroups: List.generate(chartItems.length, (index) {
-                                final item = chartItems[index];
-                                return BarChartGroupData(
-                                  x: index,
-                                  barRods: [
-                                    BarChartRodData(
-                                      toY: item.amount,
-                                      width: 26,
-                                      borderRadius: BorderRadius.circular(14),
-                                      gradient: item.gradient,
-                                    ),
-                                  ],
-                                );
-                              }),
-                            ),
                           ),
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                AppSettings.formatCurrency(totalTracked, AppSettings.getCurrency()),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w700,
+                                  fontFamily: 'Inter',
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Total Tracked',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                  fontSize: 12,
+                                  fontFamily: 'Inter',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
               );
 
               final legendWidget = Column(
@@ -381,7 +347,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final rangeTransactions = range.apply(transactions);
     final expenseBreakdown = _buildExpenseBreakdown(rangeTransactions);
     final totalExpenses = expenseBreakdown.fold<double>(0, (sum, item) => sum + item.amount);
-    final maxAmount = expenseBreakdown.fold<double>(0, (sum, item) => math.max(sum, item.amount));
 
     return _ReportCard(
       title: 'Expense Category Analysis',
@@ -391,94 +356,28 @@ class _ReportsScreenState extends State<ReportsScreen> {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildChartToggle(
-                  value: _expenseChartDisplay,
-                  onChanged: (value) => setState(() => _expenseChartDisplay = value),
-                ),
-                const SizedBox(height: 18),
                 SizedBox(
                   height: 320,
-                  child: _expenseChartDisplay == _ChartDisplay.pie
-                      ? PieChart(
-                          PieChartData(
-                            sectionsSpace: 4,
-                            centerSpaceRadius: 46,
-                            sections: expenseBreakdown.map((item) {
-                              final percentage = totalExpenses == 0 ? 0.0 : (item.amount / totalExpenses) * 100;
-                              return PieChartSectionData(
-                                value: item.amount,
-                                gradient: item.gradient,
-                                radius: 74,
-                                title: '${percentage.toStringAsFixed(1)}%',
-                                titleStyle: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              );
-                            }).toList(),
+                  child: PieChart(
+                    PieChartData(
+                      sectionsSpace: 4,
+                      centerSpaceRadius: 46,
+                      sections: expenseBreakdown.map((item) {
+                        final percentage = totalExpenses == 0 ? 0.0 : (item.amount / totalExpenses) * 100;
+                        return PieChartSectionData(
+                          value: item.amount,
+                          gradient: item.gradient,
+                          radius: 74,
+                          title: '${percentage.toStringAsFixed(1)}%',
+                          titleStyle: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
                           ),
-                        )
-                      : BarChart(
-                          BarChartData(
-                            maxY: maxAmount == 0 ? 10 : maxAmount * 1.2,
-                            alignment: BarChartAlignment.spaceAround,
-                            gridData: FlGridData(
-                              show: true,
-                              drawVerticalLine: false,
-                              horizontalInterval: maxAmount == 0 ? 2 : maxAmount / 4,
-                              getDrawingHorizontalLine: (_) => const FlLine(
-                                color: Colors.white10,
-                                strokeWidth: 1,
-                              ),
-                            ),
-                            borderData: FlBorderData(show: false),
-                            titlesData: FlTitlesData(
-                              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                              leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                              bottomTitles: AxisTitles(
-                                sideTitles: SideTitles(
-                                  showTitles: true,
-                                  reservedSize: 44,
-                                  getTitlesWidget: (value, meta) {
-                                    final index = value.toInt();
-                                    if (index < 0 || index >= expenseBreakdown.length) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    return Padding(
-                                      padding: const EdgeInsets.only(top: 10),
-                                      child: SizedBox(
-                                        width: 72,
-                                        child: Text(
-                                          expenseBreakdown[index].label,
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          textAlign: TextAlign.center,
-                                          style: const TextStyle(color: Colors.white70, fontSize: 11),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ),
-                            barGroups: List.generate(expenseBreakdown.length, (index) {
-                              final item = expenseBreakdown[index];
-                              return BarChartGroupData(
-                                x: index,
-                                barRods: [
-                                  BarChartRodData(
-                                    toY: item.amount,
-                                    width: 22,
-                                    borderRadius: BorderRadius.circular(12),
-                                    gradient: item.gradient,
-                                  ),
-                                ],
-                              );
-                            }),
-                          ),
-                        ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 18),
                 ...expenseBreakdown.map((item) {
@@ -893,39 +792,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _buildChartToggle({
-    required _ChartDisplay value,
-    required ValueChanged<_ChartDisplay> onChanged,
-  }) {
-    return SegmentedButton<_ChartDisplay>(
-      showSelectedIcon: false,
-      style: ButtonStyle(
-        backgroundColor: WidgetStateProperty.resolveWith((states) {
-          return states.contains(WidgetState.selected) ? const Color(0xFF2C417A) : const Color(0xFF0E1528);
-        }),
-        foregroundColor: WidgetStateProperty.all(Colors.white),
-      ),
-      segments: const [
-        ButtonSegment<_ChartDisplay>(
-          value: _ChartDisplay.pie,
-          label: Text('Pie Chart'),
-          icon: Icon(Icons.pie_chart_outline_rounded),
-        ),
-        ButtonSegment<_ChartDisplay>(
-          value: _ChartDisplay.bar,
-          label: Text('Bar Chart'),
-          icon: Icon(Icons.bar_chart_rounded),
-        ),
-      ],
-      selected: <_ChartDisplay>{value},
-      onSelectionChanged: (selection) {
-        if (selection.isNotEmpty) {
-          onChanged(selection.first);
-        }
-      },
-    );
-  }
-
   List<_CategoryChartItem> _buildExpenseBreakdown(List<Transaction> transactions) {
     final totals = <String, double>{};
 
@@ -1044,11 +910,6 @@ enum _ReportTimeframe {
   const _ReportTimeframe(this.label);
 
   final String label;
-}
-
-enum _ChartDisplay {
-  pie,
-  bar,
 }
 
 enum _ReportSection {
@@ -1221,36 +1082,51 @@ class _ReportCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF121A30),
-        borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(26),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF6AA8FF).withValues(alpha: 0.15),
+                blurRadius: 20,
+                spreadRadius: 4,
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-              height: 1.3,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Outfit',
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  height: 1.3,
+                  fontFamily: 'Inter',
+                ),
+              ),
+              const SizedBox(height: 12),
+              child,
+            ],
           ),
-          const SizedBox(height: 12),
-          child,
-        ],
+        ),
       ),
     );
   }
@@ -1306,6 +1182,34 @@ class _LegendTile extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PieChartBadge extends StatelessWidget {
+  const _PieChartBadge({
+    required this.percentage,
+  });
+
+  final double percentage;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF08101F),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Text(
+        '${percentage.toStringAsFixed(1)}%',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
