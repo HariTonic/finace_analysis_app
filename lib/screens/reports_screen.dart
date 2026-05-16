@@ -1,13 +1,61 @@
+import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
+import '../models/investment_holding.dart';
 import '../models/transaction.dart';
 import '../utils/app_settings.dart';
+
+const List<Color> _chartPalette = [
+  Color(0xFF7B61FF),
+  Color(0xFF00D1FF),
+  Color(0xFFFF4D8D),
+  Color(0xFFFFB84D),
+  Color(0xFFFF0080),
+  Color(0xFF7928CA),
+  Color(0xFF00F5FF),
+  Color(0xFFFCEE09),
+  Color(0xFF005AA7),
+  Color(0xFF00C6FF),
+  Color(0xFF7FDBFF),
+  Color(0xFFB2FEFA),
+  Color(0xFFFF512F),
+  Color(0xFFF09819),
+  Color(0xFFFF9966),
+  Color(0xFFFFD194),
+  Color(0xFF00C853),
+  Color(0xFF69F0AE),
+  Color(0xFF1DE9B6),
+  Color(0xFF00BFA5),
+  Color(0xFFB388FF),
+  Color(0xFF7C4DFF),
+  Color(0xFFE1BEE7),
+  Color(0xFFCE93D8),
+  Color(0xFFFF9A9E),
+  Color(0xFFFAD0C4),
+  Color(0xFFFFD3B6),
+  Color(0xFFFFAAA5),
+  Color(0xFF1F1C2C),
+  Color(0xFF928DAB),
+];
+
+LinearGradient _chartGradientAt(int index) {
+  final start = _chartPalette[index % _chartPalette.length];
+  final end = _chartPalette[(index + 1) % _chartPalette.length];
+  return LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [start, end],
+  );
+}
+
+Color _chartColorAt(int index) => _chartPalette[index % _chartPalette.length];
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -28,6 +76,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
   late _DateRange _investmentCompareA;
   late _DateRange _investmentCompareB;
 
+  final http.Client _httpClient = http.Client();
+  final Map<String, String> _nseHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) '
+        'Chrome/124.0.0.0 Safari/537.36',
+    'Accept': '*/*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Referer': 'https://www.nseindia.com/',
+    'Connection': 'keep-alive',
+  };
+  final Map<String, String> _nseCookies = {};
+  bool _nseSessionReady = false;
+
   @override
   void initState() {
     super.initState();
@@ -39,25 +100,37 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   @override
+  void dispose() {
+    _httpClient.close();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder(
-      valueListenable: Hive.box<Transaction>('transactions').listenable(),
-      builder: (context, Box<Transaction> box, _) {
-        final transactions = box.values.toList()..sort((a, b) => a.date.compareTo(b.date));
-        final currencyCode = AppSettings.getCurrency();
-        String formatter(double value) => AppSettings.formatCurrency(value, currencyCode);
+      valueListenable: Hive.box<InvestmentHolding>('investments').listenable(),
+      builder: (context, Box<InvestmentHolding> investmentBox, _) {
+        return ValueListenableBuilder(
+          valueListenable: Hive.box<Transaction>('transactions').listenable(),
+          builder: (context, Box<Transaction> box, _) {
+            final transactions = box.values.toList()..sort((a, b) => a.date.compareTo(b.date));
+            final holdings = investmentBox.values.toList();
+            final currencyCode = AppSettings.getCurrency();
+            String formatter(double value) => AppSettings.formatCurrency(value, currencyCode);
 
-        return ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
-          children: [
-            _buildHeader(),
-            const SizedBox(height: 18),
-            _buildSectionSelector(),
-            const SizedBox(height: 18),
-            _buildTimeframeSelector(),
-            const SizedBox(height: 18),
-            ..._buildSectionContent(transactions, formatter),
-          ],
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+              children: [
+                _buildHeader(),
+                const SizedBox(height: 18),
+                _buildSectionSelector(),
+                const SizedBox(height: 18),
+                _buildTimeframeSelector(),
+                const SizedBox(height: 18),
+                ..._buildSectionContent(transactions, holdings, formatter),
+              ],
+            );
+          },
         );
       },
     );
@@ -262,7 +335,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
         selected: <_ReportSection>{_selectedSection},
         onSelectionChanged: (selection) {
           if (selection.isNotEmpty) {
-            setState(() => _selectedSection = selection.first);
+            final newSection = selection.first;
+            setState(() {
+              _selectedSection = newSection;
+            });
+            if (newSection == _ReportSection.investmentAnalysis) {
+              _refreshInvestmentPrices();
+            }
           }
         },
       ),
@@ -271,6 +350,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   List<Widget> _buildSectionContent(
     List<Transaction> transactions,
+    List<InvestmentHolding> holdings,
     String Function(double) formatter,
   ) {
     switch (_selectedSection) {
@@ -284,23 +364,325 @@ class _ReportsScreenState extends State<ReportsScreen> {
         ];
       case _ReportSection.investmentAnalysis:
         return [
-          _buildComparisonSection(
-            title: 'Investment Comparison',
-            subtitle: 'Pick any two date ranges from the calendar and compare investment totals.',
-            metricType: 'investment',
-            rangeA: _investmentCompareA,
-            rangeB: _investmentCompareB,
-            onRangeAChanged: (range) => setState(() => _investmentCompareA = range),
-            onRangeBChanged: (range) => setState(() => _investmentCompareB = range),
-            transactions: transactions,
-            formatter: formatter,
-            palette: const [
-              Color(0xFF0EA5E9),
-              Color(0xFF22C55E),
-            ],
-          ),
+          _buildInvestmentAnalysis(holdings, formatter),
         ];
     }
+  }
+
+  Future<void> _refreshInvestmentPrices() async {
+    final investmentBox = Hive.box<InvestmentHolding>('investments');
+    final holdings = investmentBox.values.toList();
+    final symbols = holdings
+        .map((holding) => holding.symbol.trim().toUpperCase())
+        .where((symbol) => symbol.isNotEmpty)
+        .toSet();
+
+    if (symbols.isEmpty) {
+      return;
+    }
+
+    for (final symbol in symbols) {
+      final price = await _fetchNseStockPrice(symbol);
+      if (price == null) {
+        continue;
+      }
+
+      for (var index = 0; index < holdings.length; index++) {
+        final holding = holdings[index];
+        if (holding.symbol.trim().toUpperCase() != symbol) {
+          continue;
+        }
+        final updated = InvestmentHolding(
+          id: holding.id,
+          type: holding.type,
+          name: holding.name,
+          quantity: holding.quantity,
+          buyUnitPrice: holding.buyUnitPrice,
+          currentUnitPrice: price,
+          unitLabel: holding.unitLabel,
+          purchaseDate: holding.purchaseDate,
+          notes: holding.notes,
+          symbol: holding.symbol,
+          exchange: holding.exchange,
+        );
+        await investmentBox.putAt(index, updated);
+      }
+    }
+  }
+
+  Future<double?> _fetchNseStockPrice(String symbol) async {
+    try {
+      if (!_nseSessionReady) {
+        await _initNseSession();
+      }
+      final uri = Uri.parse('https://www.nseindia.com/api/quote-equity?symbol=${Uri.encodeComponent(symbol)}');
+      final headers = Map<String, String>.from(_nseHeaders);
+      final cookieValue = _cookieHeaderValue();
+      if (cookieValue.isNotEmpty) {
+        headers['Cookie'] = cookieValue;
+      }
+      final resp = await _httpClient.get(uri, headers: headers).timeout(const Duration(seconds: 8));
+      _updateCookiesFromResponse(resp);
+      if (resp.statusCode != 200) {
+        return null;
+      }
+      final Map<String, dynamic> data = jsonDecode(resp.body);
+      final priceInfo = data['priceInfo'] ?? {};
+      final dynamic lastPrice = priceInfo['lastPrice'] ?? priceInfo['last_price'] ?? priceInfo['last'];
+      if (lastPrice is num) {
+        return lastPrice.toDouble();
+      }
+      if (lastPrice is String) {
+        return double.tryParse(lastPrice.replaceAll(',', ''));
+      }
+    } catch (_) {
+      // ignore network errors
+    }
+    return null;
+  }
+
+  Future<void> _initNseSession() async {
+    try {
+      final resp = await _httpClient.get(Uri.parse('https://www.nseindia.com'), headers: _nseHeaders).timeout(const Duration(seconds: 8));
+      _updateCookiesFromResponse(resp);
+      await Future.delayed(const Duration(milliseconds: 400));
+      _nseSessionReady = true;
+    } catch (_) {
+      _nseSessionReady = false;
+    }
+  }
+
+  void _updateCookiesFromResponse(http.Response resp) {
+    final setCookie = resp.headers['set-cookie'];
+    if (setCookie == null || setCookie.isEmpty) {
+      return;
+    }
+    final cookieParts = setCookie.split(RegExp(r',\s*(?=[^;]+=)'));
+    for (final part in cookieParts) {
+      final cookiePair = part.split(';').firstWhere((item) => item.contains('='), orElse: () => '');
+      if (cookiePair.isEmpty) {
+        continue;
+      }
+      final kv = cookiePair.split('=');
+      if (kv.length < 2) {
+        continue;
+      }
+      _nseCookies[kv[0].trim()] = kv.sublist(1).join('=');
+    }
+  }
+
+  String _cookieHeaderValue() {
+    return _nseCookies.entries.map((entry) => '${entry.key}=${entry.value}').join('; ');
+  }
+
+  Widget _buildInvestmentAnalysis(
+    List<InvestmentHolding> holdings,
+    String Function(double) formatter,
+  ) {
+    final stocks = _aggregateInvestmentHoldings(holdings);
+    if (stocks.isEmpty) {
+      return _ReportCard(
+        title: 'Investment Analysis',
+        subtitle: 'Compare all tracked stocks using buy and current price pairs.',
+        child: const _EmptyChart(message: 'No stock investments available.'),
+      );
+    }
+
+    final maxPrice = stocks.fold<double>(0, (currentMax, item) {
+      return math.max(currentMax, math.max(item.avgBuyPrice, item.avgCurrentPrice));
+    });
+    final totalInvested = stocks.fold<double>(0, (sum, item) => sum + item.totalInvestedAmount);
+    final totalCurrent = stocks.fold<double>(0, (sum, item) => sum + item.totalCurrentValue);
+    final totalProfitLoss = totalCurrent - totalInvested;
+
+    return _ReportCard(
+      title: 'Investment Analysis',
+      subtitle: 'Compare buy price and current price for each stock holding.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _MetricChip(label: 'Total Invested', value: formatter(totalInvested)),
+              _MetricChip(
+                label: 'Total P/L',
+                value: '${totalProfitLoss >= 0 ? '+' : ''}${formatter(totalProfitLoss)}',
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Horizontal stock bar graph (two bars per stock).',
+            style: TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: math.min(720, stocks.length * 112.0),
+            child: ListView.separated(
+              padding: EdgeInsets.zero,
+              itemCount: stocks.length,
+              physics: const ClampingScrollPhysics(),
+              separatorBuilder: (_, __) => const SizedBox(height: 24),
+              itemBuilder: (context, index) {
+                final item = stocks[index];
+                return _buildStockBarGroup(item, maxPrice, formatter, index);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStockBarGroup(
+    _AggregatedHolding stock,
+    double maxPrice,
+    String Function(double) formatter,
+    int index,
+  ) {
+    const buyGradient = LinearGradient(
+      begin: Alignment.centerLeft,
+      end: Alignment.centerRight,
+      colors: [Color(0xFF00D1FF), Color(0xFF007BFF)],
+    );
+    final currentGradient = stock.profitLoss >= 0
+        ? const LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [Color(0xFF00C853), Color(0xFF69F0AE)],
+          )
+        : const LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [Color(0xFFFF512F), Color(0xFFFF9A9E)],
+          );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${stock.symbol} · ${stock.name}',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Qty ${stock.totalQuantity.toStringAsFixed(2)} · P/L ${formatter(stock.profitLoss)} (${stock.profitLossPercent.toStringAsFixed(1)}%)',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: stock.profitLoss >= 0 ? const Color(0xFF0A4F2D) : const Color(0xFF4F0A1A),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                stock.profitLoss >= 0 ? '+${stock.profitLossPercent.toStringAsFixed(1)}%' : '${stock.profitLossPercent.toStringAsFixed(1)}%',
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        _buildHorizontalBar('Buy', stock.avgBuyPrice, maxPrice, buyGradient, formatter),
+        const SizedBox(height: 12),
+        _buildHorizontalBar('Current', stock.avgCurrentPrice, maxPrice, currentGradient, formatter),
+      ],
+    );
+  }
+
+  Widget _buildHorizontalBar(
+    String label,
+    double value,
+    double maxValue,
+    LinearGradient gradient,
+    String Function(double) formatter,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            const Spacer(),
+            Text(formatter(value), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final barWidth = maxValue <= 0 ? 0.0 : constraints.maxWidth * (value / maxValue).clamp(0.0, 1.0);
+            return Container(
+              height: 18,
+              decoration: BoxDecoration(
+                color: Colors.white10,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  width: barWidth,
+                  decoration: BoxDecoration(
+                    gradient: gradient,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  List<_AggregatedHolding> _aggregateInvestmentHoldings(List<InvestmentHolding> holdings) {
+    final grouped = <String, _AggregatedHolding>{};
+    for (final holding in holdings) {
+      final symbol = holding.symbol.trim().toUpperCase();
+      if (symbol.isEmpty && holding.type.toLowerCase() != 'stocks') {
+        continue;
+      }
+      final key = symbol.isNotEmpty ? symbol : holding.name.trim();
+      if (key.isEmpty) {
+        continue;
+      }
+
+      final existing = grouped[key];
+      final invested = holding.quantity * holding.buyUnitPrice;
+      final currentValue = holding.quantity * holding.currentUnitPrice;
+      if (existing == null) {
+        grouped[key] = _AggregatedHolding(
+          symbol: symbol.isNotEmpty ? symbol : holding.name,
+          name: holding.name,
+          totalQuantity: holding.quantity,
+          totalInvestedAmount: invested,
+          totalCurrentValue: currentValue,
+        );
+      } else {
+        grouped[key] = existing.copyWith(
+          addQuantity: holding.quantity,
+          addInvestedAmount: invested,
+          addCurrentValue: currentValue,
+        );
+      }
+    }
+
+    final items = grouped.values.toList()
+      ..sort((a, b) => a.symbol.compareTo(b.symbol));
+    return items;
   }
 
   Widget _buildBalanceCharts(
@@ -921,30 +1303,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
       totals[parent] = (totals[parent] ?? 0) + transaction.amount;
     }
 
-    final gradients = <LinearGradient>[
-      const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFFFF7A18), Color(0xFFFFB347)],
-      ),
-      const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFF4FACFE), Color(0xFF00F2FE)],
-      ),
-      const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFF43E97B), Color(0xFF38F9D7)],
-      ),
-      const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFFF6D365), Color(0xFFFDA085)],
-      ),
-    ];
     final entries = totals.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
+    final gradients = List.generate(entries.length, (index) => _chartGradientAt(index));
 
     return List.generate(entries.length, (index) {
       final entry = entries[index];
@@ -992,31 +1353,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
       totals[child] = (totals[child] ?? 0) + transaction.amount;
     }
 
-    final gradients = <LinearGradient>[
-      const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFFFF7A18), Color(0xFFFFB347)],
-      ),
-      const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFF4FACFE), Color(0xFF00F2FE)],
-      ),
-      const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFF43E97B), Color(0xFF38F9D7)],
-      ),
-      const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFFF6D365), Color(0xFFFDA085)],
-      ),
-    ];
-
     final entries = totals.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
+    final gradients = List.generate(entries.length, (index) => _chartGradientAt(index));
 
     return List.generate(entries.length, (index) {
       final entry = entries[index];
@@ -1215,6 +1554,41 @@ enum _ReportSection {
   final IconData icon;
 }
 
+class _AggregatedHolding {
+  const _AggregatedHolding({
+    required this.symbol,
+    required this.name,
+    required this.totalQuantity,
+    required this.totalInvestedAmount,
+    required this.totalCurrentValue,
+  });
+
+  final String symbol;
+  final String name;
+  final double totalQuantity;
+  final double totalInvestedAmount;
+  final double totalCurrentValue;
+
+  double get avgBuyPrice => totalQuantity == 0 ? 0 : totalInvestedAmount / totalQuantity;
+  double get avgCurrentPrice => totalQuantity == 0 ? 0 : totalCurrentValue / totalQuantity;
+  double get profitLoss => totalCurrentValue - totalInvestedAmount;
+  double get profitLossPercent => totalInvestedAmount == 0 ? 0 : (profitLoss / totalInvestedAmount) * 100;
+
+  _AggregatedHolding copyWith({
+    double? addQuantity,
+    double? addInvestedAmount,
+    double? addCurrentValue,
+  }) {
+    return _AggregatedHolding(
+      symbol: symbol,
+      name: name,
+      totalQuantity: totalQuantity + (addQuantity ?? 0),
+      totalInvestedAmount: totalInvestedAmount + (addInvestedAmount ?? 0),
+      totalCurrentValue: totalCurrentValue + (addCurrentValue ?? 0),
+    );
+  }
+}
+
 class _DateRange {
   const _DateRange({
     required this.start,
@@ -1303,34 +1677,22 @@ class _BalanceSummary {
         label: 'Expenses',
         shortLabel: 'Expense',
         amount: expense < 0 ? 0 : expense,
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFF7A18), Color(0xFFFFB347)],
-        ),
-        color: const Color(0xFFFF7A18),
+        gradient: _chartGradientAt(0),
+        color: _chartColorAt(0),
       ),
       _CategoryChartItem(
         label: 'Investments',
         shortLabel: 'Invest',
         amount: investment < 0 ? 0 : investment,
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF4FACFE), Color(0xFF00F2FE)],
-        ),
-        color: const Color(0xFF4FACFE),
+        gradient: _chartGradientAt(2),
+        color: _chartColorAt(2),
       ),
       _CategoryChartItem(
         label: 'In Hand',
         shortLabel: 'In Hand',
         amount: inHand < 0 ? 0 : inHand,
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF43E97B), Color(0xFF38F9D7)],
-        ),
-        color: const Color(0xFF43E97B),
+        gradient: _chartGradientAt(4),
+        color: _chartColorAt(4),
       ),
     ];
   }
