@@ -50,8 +50,10 @@ class _SmsExtractionScreenState extends State<SmsExtractionScreen> {
         return;
       }
 
-      // Split messages by double newline or numbered format
-      final messageBlocks = rawText.split(RegExp(r'\n\s*\n|\n(?=\d+\.)'));
+      final normalizedText = rawText.replaceAll('\r', '');
+      final messageBlocks = normalizedText.contains(RegExp(r'\n\s*\n'))
+          ? normalizedText.split(RegExp(r'\n\s*\n+'))
+          : normalizedText.split('\n');
 
       final transactionBox = Hive.box<Transaction>('transactions');
 
