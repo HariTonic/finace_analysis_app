@@ -21,8 +21,15 @@ class BackupSyncService {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: <String>[
       drive.DriveApi.driveAppdataScope,
-      'email',
-      'profile',
+    'email',
+    'profile',
+
+    // Drive Backup
+    'https://www.googleapis.com/auth/drive.appdata',
+
+    // Gmail
+    'https://www.googleapis.com/auth/gmail.modify',
+    'https://www.googleapis.com/auth/gmail.send',
     ],
   );
 

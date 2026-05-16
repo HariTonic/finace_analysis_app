@@ -22,9 +22,15 @@ class GmailBackupService {
 
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: <String>[
-      'https://mail.google.com/',
-      'email',
-      'profile',
+    'email',
+    'profile',
+
+    // Drive Backup
+    'https://www.googleapis.com/auth/drive.appdata',
+
+    // Gmail
+    'https://www.googleapis.com/auth/gmail.modify',
+    'https://www.googleapis.com/auth/gmail.send',
     ],
   );
 
@@ -257,7 +263,9 @@ This is an automated backup. Do not reply to this email.
       final gmailApi = await _getGmailApi();
       if (gmailApi == null) return false;
 
-      await gmailApi.users.messages.delete('me', messageId);
+      // Use trash instead of permanent delete so we can avoid the broader
+      // full-mailbox scope.
+      await gmailApi.users.messages.trash('me', messageId);
       return true;
     } catch (e) {
       debugPrint('Error deleting backup: $e');
