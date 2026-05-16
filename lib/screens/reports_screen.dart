@@ -313,125 +313,130 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final chartItems = summary.toChartItems();
     final totalTracked = summary.totalTracked;
 
-    return _ReportCard(
-      title: 'Balance Mix',
-      subtitle: '${_selectedTimeframe.label} · Expense vs investment vs in-hand amount',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 18),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final stacked = constraints.maxWidth < 860;
-              final expenseBreakdown = _buildExpenseBreakdown(rangeTransactions);
-              final totalExpenses = expenseBreakdown.fold<double>(0, (sum, item) => sum + item.amount);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 4),
+        const Text(
+          'Balance Mix',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            fontFamily: 'Outfit',
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${_selectedTimeframe.label} · Expense vs investment vs in-hand amount',
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 12,
+            height: 1.3,
+            fontFamily: 'Inter',
+          ),
+        ),
+        const SizedBox(height: 12),
+        const SizedBox(height: 18),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final stacked = constraints.maxWidth < 860;
+            final expenseBreakdown = _buildExpenseBreakdown(rangeTransactions);
+            final totalExpenses = expenseBreakdown.fold<double>(0, (sum, item) => sum + item.amount);
 
-              final chartWidget = SizedBox(
-                height: 312,
-                child: totalExpenses <= 0
-                    ? const _EmptyChart(message: 'No expense data available for this timeframe.')
-                    : Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            PieChart(
-                              PieChartData(
-                                sectionsSpace: 10,
-                                centerSpaceRadius: 96,
-                                startDegreeOffset: -90,
-                                borderData: FlBorderData(show: false),
-                                sections: expenseBreakdown.map((item) {
-                                  final percentage = totalExpenses == 0 ? 0.0 : (item.amount / totalExpenses) * 100;
-                                  return PieChartSectionData(
-                                    value: item.amount,
-                                    gradient: item.gradient,
-                                    radius: 100,
-                                    title: '${percentage.toStringAsFixed(1)}%',
-                                    titleStyle: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
-                                    titlePositionPercentageOffset: 0.6,
-                                  );
-                                }).toList(),
+            final chartWidget = SizedBox(
+              height: 416,
+              child: totalExpenses <= 0
+                  ? const _EmptyChart(message: 'No expense data available for this timeframe.')
+                  : Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          _RoundedPieChart(
+                            items: expenseBreakdown,
+                            total: totalExpenses,
+                            size: 416,
+                            innerRadius: 129,
+                            thicknessScale: 1.05,
+                          ),
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                AppSettings.formatCurrency(totalExpenses, AppSettings.getCurrency()),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w800,
+                                  fontFamily: 'Inter',
+                                ),
                               ),
-                            ),
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  AppSettings.formatCurrency(totalExpenses, AppSettings.getCurrency()),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.w800,
-                                    fontFamily: 'Inter',
-                                  ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Total Spending',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                  fontSize: 12,
+                                  fontFamily: 'Inter',
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Total Spending',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.6),
-                                    fontSize: 12,
-                                    fontFamily: 'Inter',
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-              );
-
-              final legendWidget = Column(
-                children: chartItems.map((item) {
-                  final percentage = totalTracked == 0 ? 0.0 : (item.amount / totalTracked) * 100;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: _LegendTile(
-                      label: item.label,
-                      amount: formatter(item.amount),
-                      percentage: '${percentage.toStringAsFixed(1)}%',
-                      colors: item.gradient.colors,
                     ),
-                  );
-                }).toList(),
-              );
+            );
 
-              if (stacked) {
-                return Column(
-                  children: [
-                    chartWidget,
-                    const SizedBox(height: 24),
-                    legendWidget,
-                  ],
-                );
-              }
-
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: constraints.maxWidth * 0.5,
-                    child: Center(child: chartWidget),
+            final legendWidget = Column(
+              children: chartItems.map((item) {
+                final percentage = totalTracked == 0 ? 0.0 : (item.amount / totalTracked) * 100;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _LegendTile(
+                    label: item.label,
+                    amount: formatter(item.amount),
+                    percentage: '${percentage.toStringAsFixed(1)}%',
+                    colors: item.gradient.colors,
                   ),
-                  const SizedBox(width: 18),
-                  Expanded(child: legendWidget),
+                );
+              }).toList(),
+            );
+
+            if (stacked) {
+              return Column(
+                children: [
+                  chartWidget,
+                  const SizedBox(height: 24),
+                  legendWidget,
                 ],
               );
-            },
-          ),
-          const SizedBox(height: 28),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _MetricChip(label: 'Income', value: formatter(summary.income)),
-              _MetricChip(label: 'Tracked Total', value: formatter(summary.totalTracked)),
-              _MetricChip(label: 'Range', value: range.label),
-            ],
-          ),
-        ],
-      ),
+            }
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: constraints.maxWidth * 0.5,
+                  child: Center(child: chartWidget),
+                ),
+                const SizedBox(width: 18),
+                Expanded(child: legendWidget),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 28),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            _MetricChip(label: 'Income', value: formatter(summary.income)),
+            _MetricChip(label: 'Tracked Total', value: formatter(summary.totalTracked)),
+            _MetricChip(label: 'Range', value: range.label),
+          ],
+        ),
+      ],
     );
   }
 
