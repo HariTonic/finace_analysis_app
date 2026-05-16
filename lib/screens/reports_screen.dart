@@ -19,6 +19,9 @@ class ReportsScreen extends StatefulWidget {
 class _ReportsScreenState extends State<ReportsScreen> {
   _ReportTimeframe _selectedTimeframe = _ReportTimeframe.currentMonth;
   _ReportSection _selectedSection = _ReportSection.balanceMix;
+  String? _selectedExpenseParentCategory;
+  DateTime? _customRangeStart;
+  DateTime? _customRangeEnd;
 
   late _DateRange _expenseCompareA;
   late _DateRange _expenseCompareB;
@@ -103,32 +106,131 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return _ReportCard(
       title: 'Analysis Range',
       subtitle: 'Select timeframe for charts.',
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: _ReportTimeframe.values.map((timeframe) {
-            final isSelected = timeframe == _selectedTimeframe;
-            return ChoiceChip(
-              selected: isSelected,
-              label: Text(
-                timeframe.label,
-                style: const TextStyle(fontSize: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _ReportTimeframe.values.map((timeframe) {
+                final isSelected = timeframe == _selectedTimeframe;
+                return ChoiceChip(
+                  selected: isSelected,
+                  label: Text(
+                    timeframe.label,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  selectedColor: const Color(0xFF7A85FF),
+                  backgroundColor: const Color(0xFF11182E),
+                  labelStyle: TextStyle(
+                    color: isSelected ? Colors.white : Colors.white70,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  onSelected: (_) => setState(() {
+                    _selectedTimeframe = timeframe;
+                    if (timeframe == _ReportTimeframe.custom) {
+                      _customRangeStart ??= DateTime.now().subtract(const Duration(days: 30));
+                      _customRangeEnd ??= DateTime.now();
+                    } else {
+                      _customRangeStart = null;
+                      _customRangeEnd = null;
+                    }
+                  }),
+                );
+              }).toList(),
+            ),
+          ),
+          if (_selectedTimeframe == _ReportTimeframe.custom) ...[
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: _DateButton(
+                    title: 'From',
+                    value: _customRangeStart != null
+                        ? _DateRange._formatDate(_customRangeStart!)
+                        : 'Select date',
+                    onTap: () async {
+                      final picked = await _pickCustomDate(context, true);
+                      if (picked != null) {
+                        setState(() {
+                          _customRangeStart = picked;
+                          if (_customRangeEnd != null && _customRangeEnd!.isBefore(picked)) {
+                            _customRangeEnd = picked;
+                          }
+                        });
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _DateButton(
+                    title: 'To',
+                    value: _customRangeEnd != null
+                        ? _DateRange._formatDate(_customRangeEnd!)
+                        : 'Select date',
+                    onTap: () async {
+                      final picked = await _pickCustomDate(context, false);
+                      if (picked != null) {
+                        setState(() {
+                          _customRangeEnd = picked;
+                          if (_customRangeStart != null && picked.isBefore(_customRangeStart!)) {
+                            _customRangeStart = picked;
+                          }
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+            if (_customRangeStart != null && _customRangeEnd != null) ...[
+              const SizedBox(height: 14),
+              Text(
+                'Custom range: ${_DateRange(start: _customRangeStart!, end: _customRangeEnd!).label}',
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
               ),
-              selectedColor: const Color(0xFF7A85FF),
-              backgroundColor: const Color(0xFF11182E),
-              labelStyle: TextStyle(
-                color: isSelected ? Colors.white : Colors.white70,
-                fontWeight: FontWeight.w600,
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              onSelected: (_) => setState(() => _selectedTimeframe = timeframe),
-            );
-          }).toList(),
-        ),
+            ],
+          ],
+        ],
       ),
     );
+  }
+
+  Future<DateTime?> _pickCustomDate(BuildContext context, bool isStart) async {
+    final initialDate = isStart
+        ? _customRangeStart ?? DateTime.now().subtract(const Duration(days: 30))
+        : _customRangeEnd ?? DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: Color(0xFF7A85FF),
+              surface: Color(0xFF10182E),
+            ),
+            dialogTheme: const DialogThemeData(backgroundColor: Color(0xFF10182E)),
+          ),
+          child: child!,
+        );
+      },
+    );
+    return picked;
+  }
+
+  _DateRange get _activeRange {
+    if (_customRangeStart != null && _customRangeEnd != null) {
+      return _DateRange(start: _customRangeStart!, end: _customRangeEnd!);
+    }
+    return _DateRange.forTimeframe(_selectedTimeframe, DateTime.now());
   }
 
   Widget _buildSectionSelector() {
@@ -179,22 +281,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
       case _ReportSection.expenseAnalysis:
         return [
           _buildExpenseCategorySection(transactions, formatter),
-          const SizedBox(height: 18),
-          _buildComparisonSection(
-            title: 'Expense Comparison',
-            subtitle: 'Pick any two date ranges from the calendar and compare expense totals.',
-            metricType: 'expense',
-            rangeA: _expenseCompareA,
-            rangeB: _expenseCompareB,
-            onRangeAChanged: (range) => setState(() => _expenseCompareA = range),
-            onRangeBChanged: (range) => setState(() => _expenseCompareB = range),
-            transactions: transactions,
-            formatter: formatter,
-            palette: const [
-              Color(0xFFE11D48),
-              Color(0xFFF97316),
-            ],
-          ),
         ];
       case _ReportSection.investmentAnalysis:
         return [
@@ -221,7 +307,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     List<Transaction> transactions,
     String Function(double) formatter,
   ) {
-    final range = _DateRange.forTimeframe(_selectedTimeframe, DateTime.now());
+    final range = _activeRange;
     final rangeTransactions = range.apply(transactions);
     final summary = _BalanceSummary.fromTransactions(rangeTransactions);
     final chartItems = summary.toChartItems();
@@ -233,59 +319,66 @@ class _ReportsScreenState extends State<ReportsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SizedBox(height: 18),
           LayoutBuilder(
             builder: (context, constraints) {
               final stacked = constraints.maxWidth < 860;
+              final expenseBreakdown = _buildExpenseBreakdown(rangeTransactions);
+              final totalExpenses = expenseBreakdown.fold<double>(0, (sum, item) => sum + item.amount);
+
               final chartWidget = SizedBox(
-                height: 260,
-                child: totalTracked <= 0
-                    ? const _EmptyChart(message: 'No expense, investment, or balance data for this timeframe.')
-                    : Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          PieChart(
-                            PieChartData(
-                              sectionsSpace: 2,
-                              centerSpaceRadius: 80,
-                              startDegreeOffset: -90,
-                              sections: chartItems.map((item) {
-                                final percentage = totalTracked == 0 ? 0.0 : (item.amount / totalTracked) * 100;
-                                return PieChartSectionData(
-                                  value: item.amount,
-                                  gradient: item.gradient,
-                                  radius: 60,
-                                  badgeWidget: _PieChartBadge(
-                                    percentage: percentage,
-                                  ),
-                                  badgePositionPercentageOffset: 1.15,
-                                );
-                              }).toList(),
+                height: 312,
+                child: totalExpenses <= 0
+                    ? const _EmptyChart(message: 'No expense data available for this timeframe.')
+                    : Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            PieChart(
+                              PieChartData(
+                                sectionsSpace: 10,
+                                centerSpaceRadius: 96,
+                                startDegreeOffset: -90,
+                                borderData: FlBorderData(show: false),
+                                sections: expenseBreakdown.map((item) {
+                                  final percentage = totalExpenses == 0 ? 0.0 : (item.amount / totalExpenses) * 100;
+                                  return PieChartSectionData(
+                                    value: item.amount,
+                                    gradient: item.gradient,
+                                    radius: 100,
+                                    title: '${percentage.toStringAsFixed(1)}%',
+                                    titleStyle: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+                                    titlePositionPercentageOffset: 0.6,
+                                  );
+                                }).toList(),
+                              ),
                             ),
-                          ),
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                AppSettings.formatCurrency(totalTracked, AppSettings.getCurrency()),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w700,
-                                  fontFamily: 'Inter',
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  AppSettings.formatCurrency(totalExpenses, AppSettings.getCurrency()),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w800,
+                                    fontFamily: 'Inter',
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Total Tracked',
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.6),
-                                  fontSize: 12,
-                                  fontFamily: 'Inter',
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Total Spending',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.6),
+                                    fontSize: 12,
+                                    fontFamily: 'Inter',
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ],
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
               );
 
@@ -308,7 +401,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 return Column(
                   children: [
                     chartWidget,
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 24),
                     legendWidget,
                   ],
                 );
@@ -317,14 +410,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(flex: 6, child: chartWidget),
+                  SizedBox(
+                    width: constraints.maxWidth * 0.5,
+                    child: Center(child: chartWidget),
+                  ),
                   const SizedBox(width: 18),
-                  Expanded(flex: 5, child: legendWidget),
+                  Expanded(child: legendWidget),
                 ],
               );
             },
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 28),
           Wrap(
             spacing: 12,
             runSpacing: 12,
@@ -343,55 +439,75 @@ class _ReportsScreenState extends State<ReportsScreen> {
     List<Transaction> transactions,
     String Function(double) formatter,
   ) {
-    final range = _DateRange.forTimeframe(_selectedTimeframe, DateTime.now());
+    final range = _activeRange;
     final rangeTransactions = range.apply(transactions);
+    final parentCategories = _buildExpenseParentCategories(rangeTransactions);
+    final selectedCategory = parentCategories.contains(_selectedExpenseParentCategory)
+        ? _selectedExpenseParentCategory
+        : null;
     final expenseBreakdown = _buildExpenseBreakdown(rangeTransactions);
     final totalExpenses = expenseBreakdown.fold<double>(0, (sum, item) => sum + item.amount);
 
     return _ReportCard(
       title: 'Expense Category Analysis',
       subtitle: '${_selectedTimeframe.label} · Parent-category classification with money and percentage',
-      child: expenseBreakdown.isEmpty
+      child: rangeTransactions.where((t) => t.type == 'expense').isEmpty
           ? const _EmptyChart(message: 'No expense data available in this timeframe.')
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(
-                  height: 320,
-                  child: PieChart(
-                    PieChartData(
-                      sectionsSpace: 4,
-                      centerSpaceRadius: 46,
-                      sections: expenseBreakdown.map((item) {
-                        final percentage = totalExpenses == 0 ? 0.0 : (item.amount / totalExpenses) * 100;
-                        return PieChartSectionData(
-                          value: item.amount,
-                          gradient: item.gradient,
-                          radius: 74,
-                          title: '${percentage.toStringAsFixed(1)}%',
-                          titleStyle: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        );
-                      }).toList(),
+                _buildExpenseCategoryFilter(parentCategories),
+                const SizedBox(height: 26),
+                if (selectedCategory == null) ...[
+                  SizedBox(
+                    height: 416, // increased by ~30%
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        _RoundedPieChart(
+                          items: expenseBreakdown,
+                          total: totalExpenses,
+                          size: 416,
+                          innerRadius: 129,
+                          thicknessScale: 1.05,
+                        ),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'Total Spending',
+                              style: TextStyle(color: Colors.white70, fontSize: 12),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              formatter(totalExpenses),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                ),
-                const SizedBox(height: 18),
-                ...expenseBreakdown.map((item) {
-                  final percentage = totalExpenses == 0 ? 0.0 : (item.amount / totalExpenses) * 100;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: _CategoryProgressTile(
-                      label: item.label,
-                      amount: formatter(item.amount),
-                      percentage: percentage,
-                      gradient: item.gradient,
-                    ),
-                  );
-                }),
+                  const SizedBox(height: 18),
+                  ...expenseBreakdown.map((item) {
+                    final percentage = totalExpenses == 0 ? 0.0 : (item.amount / totalExpenses) * 100;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _LegendTile(
+                        label: item.label,
+                        amount: formatter(item.amount),
+                        percentage: '${percentage.toStringAsFixed(1)}%',
+                        colors: item.gradient.colors,
+                      ),
+                    );
+                  }),
+                ] else ...[
+                  _buildChildCategoryAnalysis(rangeTransactions, selectedCategory, formatter),
+                ],
               ],
             ),
     );
@@ -410,7 +526,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     required List<Color> palette,
   }) {
     final amountA = _sumByType(rangeA.apply(transactions), metricType);
-    final amountB = _sumByType(rangeB.apply(transactions), metricType);
+        final amountB = _sumByType(rangeB.apply(transactions), metricType);
     final total = amountA + amountB;
     final percentA = total == 0 ? 0.0 : (amountA / total) * 100;
     final percentB = total == 0 ? 0.0 : (amountB / total) * 100;
@@ -506,7 +622,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           ),
           const SizedBox(height: 18),
           SizedBox(
-            height: 280,
+            height: 364, // increased by ~30%
             child: total == 0
                 ? const _EmptyChart(message: 'No data found in the selected ranges.')
                 : BarChart(
@@ -555,7 +671,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             BarChartRodData(
                               toY: amountA,
                               width: 34,
-                              borderRadius: BorderRadius.circular(14),
+                              borderRadius: BorderRadius.circular(18),
                               gradient: gradientA,
                             ),
                           ],
@@ -566,7 +682,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             BarChartRodData(
                               toY: amountB,
                               width: 34,
-                              borderRadius: BorderRadius.circular(14),
+                              borderRadius: BorderRadius.circular(18),
                               gradient: gradientB,
                             ),
                           ],
@@ -599,16 +715,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   style: TextStyle(color: Colors.white70),
                 ),
                 const SizedBox(height: 14),
-                SizedBox(
-                  height: 260,
-                  child: trendMonths.isEmpty
+                      SizedBox(
+                        height: 338,
+                    child: trendMonths.isEmpty
                       ? const _EmptyChart(message: 'No monthly trend available for the selected ranges.')
                       : LineChart(
-                          LineChartData(
-                            minX: 0,
-                            maxX: math.max(trendMonths.length - 1, 0).toDouble(),
-                            minY: 0,
-                            maxY: trendMax == 0 ? 10 : trendMax * 1.25,
+                              LineChartData(
+                                minX: 0,
+                                maxX: math.max(trendMonths.length - 1, 0).toDouble(),
+                                minY: 0,
+                                maxY: trendMax == 0 ? 10 : trendMax * 1.25,
                             gridData: FlGridData(
                               show: true,
                               drawVerticalLine: false,
@@ -804,35 +920,24 @@ class _ReportsScreenState extends State<ReportsScreen> {
       const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [Color(0xFFBE123C), Color(0xFFE11D48), Color(0xFFF97316)],
+        colors: [Color(0xFFFF7A18), Color(0xFFFFB347)],
       ),
       const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [Color(0xFFFB7185), Color(0xFFF43F5E), Color(0xFFEF4444)],
+        colors: [Color(0xFF4FACFE), Color(0xFF00F2FE)],
       ),
       const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [Color(0xFF9F1239), Color(0xFFFB7185), Color(0xFFFDA4AF)],
+        colors: [Color(0xFF43E97B), Color(0xFF38F9D7)],
       ),
       const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [Color(0xFF991B1B), Color(0xFFDC2626), Color(0xFFF59E0B)],
-      ),
-      const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFF881337), Color(0xFFEC4899), Color(0xFFFB7185)],
-      ),
-      const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFF7F1D1D), Color(0xFFEF4444), Color(0xFFFCA5A5)],
+        colors: [Color(0xFFF6D365), Color(0xFFFDA085)],
       ),
     ];
-
     final entries = totals.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
@@ -851,6 +956,187 @@ class _ReportsScreenState extends State<ReportsScreen> {
   String _parentCategory(String category) {
     final parts = category.split(' - ');
     return parts.first.trim();
+  }
+
+  String _childCategory(String category) {
+    final parts = category.split(' - ');
+    if (parts.length > 1) {
+      return parts.sublist(1).join(' - ').trim();
+    }
+    return category.trim();
+  }
+
+  List<String> _buildExpenseParentCategories(List<Transaction> transactions) {
+    final parents = transactions
+        .where((t) => t.type == 'expense')
+        .map((t) => _parentCategory(t.category))
+        .toSet()
+        .toList();
+    parents.sort((a, b) => a.compareTo(b));
+    return parents;
+  }
+
+  List<_CategoryChartItem> _buildExpenseChildBreakdown(
+    List<Transaction> transactions,
+    String parentCategory,
+  ) {
+    final totals = <String, double>{};
+
+    for (final transaction in transactions.where((t) => t.type == 'expense' && _parentCategory(t.category) == parentCategory)) {
+      final child = _childCategory(transaction.category);
+      totals[child] = (totals[child] ?? 0) + transaction.amount;
+    }
+
+    final gradients = <LinearGradient>[
+      const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFFFF7A18), Color(0xFFFFB347)],
+      ),
+      const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFF4FACFE), Color(0xFF00F2FE)],
+      ),
+      const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFF43E97B), Color(0xFF38F9D7)],
+      ),
+      const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFFF6D365), Color(0xFFFDA085)],
+      ),
+    ];
+
+    final entries = totals.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return List.generate(entries.length, (index) {
+      final entry = entries[index];
+      final gradient = gradients[index % gradients.length];
+      return _CategoryChartItem(
+        label: entry.key,
+        amount: entry.value,
+        gradient: gradient,
+        color: gradient.colors.first,
+      );
+    });
+  }
+
+  Widget _buildExpenseCategoryFilter(List<String> categories) {
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0E1528),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white12),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String?>(
+                value: _selectedExpenseParentCategory,
+                isExpanded: true,
+                dropdownColor: const Color(0xFF10182E),
+                hint: const Text('Select parent category', style: TextStyle(color: Colors.white70)),
+                icon: const Icon(Icons.expand_more, color: Colors.white70),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('All categories', style: TextStyle(color: Colors.white70)),
+                  ),
+                  ...categories.map(
+                    (category) => DropdownMenuItem<String?>(
+                      value: category,
+                      child: Text(category, style: const TextStyle(color: Colors.white)),
+                    ),
+                  )
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _selectedExpenseParentCategory = value;
+                  });
+                },
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChildCategoryAnalysis(
+    List<Transaction> transactions,
+    String parentCategory,
+    String Function(double) formatter,
+  ) {
+    final childBreakdown = _buildExpenseChildBreakdown(transactions, parentCategory);
+    final total = childBreakdown.fold<double>(0, (sum, item) => sum + item.amount);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Child categories for $parentCategory',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
+        ),
+        const SizedBox(height: 14),
+        SizedBox(
+          height: 416,
+          child: childBreakdown.isEmpty
+              ? const _EmptyChart(message: 'No child categories found for this parent category.')
+              : Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      _RoundedPieChart(
+                        items: childBreakdown,
+                        total: total,
+                        size: 416,
+                        innerRadius: 112,
+                        thicknessScale: 1.05,
+                      ),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Total',
+                            style: TextStyle(color: Colors.white70, fontSize: 12),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            formatter(total),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+        ),
+        const SizedBox(height: 18),
+        ...childBreakdown.map((item) {
+          final percentage = total == 0 ? 0.0 : (item.amount / total) * 100;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _LegendTile(
+              label: item.label,
+              amount: formatter(item.amount),
+              percentage: '${percentage.toStringAsFixed(1)}%',
+              colors: item.gradient.colors,
+            ),
+          );
+        }),
+      ],
+    );
   }
 
   double _sumByType(List<Transaction> transactions, String type) {
@@ -905,7 +1191,8 @@ enum _ReportTimeframe {
   currentMonth('Current Month'),
   quarter('Quarter'),
   halfYear('Half Year'),
-  fullYear('Full Year');
+  fullYear('Full Year'),
+  custom('Custom');
 
   const _ReportTimeframe(this.label);
 
@@ -977,6 +1264,11 @@ class _DateRange {
           start: DateTime(now.year, now.month - 11, 1),
           end: end,
         );
+      case _ReportTimeframe.custom:
+        return _DateRange(
+          start: DateTime(now.year, now.month, 1),
+          end: end,
+        );
     }
   }
 
@@ -1009,9 +1301,9 @@ class _BalanceSummary {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF9F1239), Color(0xFFE11D48), Color(0xFFF97316)],
+          colors: [Color(0xFFFF7A18), Color(0xFFFFB347)],
         ),
-        color: const Color(0xFFE11D48),
+        color: const Color(0xFFFF7A18),
       ),
       _CategoryChartItem(
         label: 'Investments',
@@ -1020,9 +1312,9 @@ class _BalanceSummary {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF0369A1), Color(0xFF0EA5E9), Color(0xFF22C55E)],
+          colors: [Color(0xFF4FACFE), Color(0xFF00F2FE)],
         ),
-        color: const Color(0xFF0EA5E9),
+        color: const Color(0xFF4FACFE),
       ),
       _CategoryChartItem(
         label: 'In Hand',
@@ -1031,9 +1323,9 @@ class _BalanceSummary {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFEAB308), Color(0xFFFACC15), Color(0xFFF59E0B)],
+          colors: [Color(0xFF43E97B), Color(0xFF38F9D7)],
         ),
-        color: const Color(0xFFFACC15),
+        color: const Color(0xFF43E97B),
       ),
     ];
   }
@@ -1550,4 +1842,94 @@ class _TrendLegend extends StatelessWidget {
       ],
     );
   }
+}
+
+class _RoundedPieChart extends StatelessWidget {
+  const _RoundedPieChart({
+    required this.items,
+    required this.total,
+    required this.size,
+    required this.innerRadius,
+    this.thicknessScale = 1.0,
+  });
+
+  final List<_CategoryChartItem> items;
+  final double total;
+  final double size;
+  final double innerRadius;
+  final double thicknessScale;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _RoundedPiePainter(items: items, total: total, innerRadius: innerRadius, thicknessScale: thicknessScale),
+      ),
+    );
+  }
+}
+
+class _RoundedPiePainter extends CustomPainter {
+  _RoundedPiePainter({required this.items, required this.total, required this.innerRadius, required this.thicknessScale});
+
+  final List<_CategoryChartItem> items;
+  final double total;
+  final double innerRadius;
+  final double thicknessScale;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (total <= 0) return;
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final outerRadius = math.min(size.width, size.height) / 2;
+    final baseThickness = outerRadius - innerRadius;
+    final thickness = baseThickness * thicknessScale;
+    var startAngle = -math.pi / 2;
+
+    for (final item in items) {
+      final sweep = (item.amount / total) * (math.pi * 2);
+
+      // create a per-slice sweep gradient using the item's gradient colors if available
+      final shaderColors = item.gradient.colors;
+      final rect = Rect.fromCircle(center: center, radius: (innerRadius + outerRadius) / 2);
+      final sweepGradient = SweepGradient(
+        startAngle: startAngle,
+        endAngle: startAngle + sweep,
+        colors: shaderColors.isNotEmpty ? shaderColors : [item.color, item.color],
+        transform: GradientRotation(0),
+      );
+
+      final paint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = thickness
+        ..strokeCap = StrokeCap.round
+        ..shader = sweepGradient.createShader(rect);
+
+      canvas.drawArc(rect, startAngle, sweep, false, paint);
+
+      // draw percentage label at arc midpoint (skip for very small slices)
+      final percentage = total == 0 ? 0.0 : (item.amount / total) * 100;
+      if (percentage >= 3.0 && sweep > 0.1) {
+        final mid = startAngle + sweep / 2;
+        final labelRadius = innerRadius + thickness * 0.66; // slightly more outward
+        final labelOffset = Offset(center.dx + math.cos(mid) * labelRadius, center.dy + math.sin(mid) * labelRadius);
+        final text = '${percentage.toStringAsFixed(1)}%';
+        final tp = TextPainter(
+          text: TextSpan(text: text, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+          textDirection: ui.TextDirection.ltr,
+        );
+        tp.layout();
+        final textPos = labelOffset - Offset(tp.width / 2, tp.height / 2);
+        tp.paint(canvas, textPos);
+      }
+
+      startAngle += sweep;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
