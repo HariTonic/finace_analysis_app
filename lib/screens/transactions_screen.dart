@@ -246,8 +246,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 transaction.type == 'income'
@@ -262,6 +263,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               ),
               PopupMenuButton<String>(
                 padding: EdgeInsets.zero,
+                tooltip: '',
                 color: const Color(0xFF1B1B2E),
                 icon: const Icon(Icons.more_vert_rounded, color: Colors.white70, size: 20),
                 onSelected: (value) async {
@@ -292,6 +294,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   }
 
   IconData _getCategoryIcon(String category) {
+    // Investment categories (check first as they have prefixes)
+    if (category.contains('Stocks Investment')) return Icons.show_chart_rounded;
+    if (category.contains('Gold Investment')) return Icons.workspace_premium_rounded;
+    if (category.contains('Other Investment')) return Icons.trending_up_rounded;
+
     // Expense categories
     if (category == 'Home') return Icons.home_rounded;
     if (category == 'Food') return Icons.restaurant;
@@ -313,10 +320,6 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     if (category == 'Investment') return Icons.trending_up_rounded;
     if (category == 'Bonus') return Icons.card_giftcard_rounded;
     if (category == 'Other') return Icons.widgets_rounded;
-
-    // Investment categories (if stored as transaction type)
-    if (category == 'Stocks') return Icons.show_chart;
-    if (category == 'Gold') return Icons.workspace_premium_rounded;
 
     return Icons.category;
   }
