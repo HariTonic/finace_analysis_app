@@ -1,6 +1,9 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
+import '../models/transaction.dart';
+import 'app_settings.dart';
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _notificationsPlugin =
@@ -22,40 +25,44 @@ class NotificationService {
   }
 
   static Future<void> scheduleDailyNotifications() async {
-    // Morning 8:10 AM
+    final monthlyLimit = AppSettings.getMonthlySpendingLimit();
+    final currency = Hive.box('settings')
+        .get(AppSettings.currencyKey, defaultValue: AppSettings.defaultCurrency)
+        as String;
+    final transactions = Hive.box<Transaction>('transactions').values.toList();
+    final now = DateTime.now();
+    final monthStart = DateTime(now.year, now.month);
+    final currentMonthExpense = transactions
+        .where((t) => t.type == 'expense')
+        .where((t) => DateTime(t.date.year, t.date.month) == monthStart)
+        .fold(0.0, (sum, t) => sum + t.amount);
+    final remaining = (monthlyLimit - currentMonthExpense).clamp(0.0, double.infinity);
+    final remainingMessage = monthlyLimit > 0
+        ? 'You have ${AppSettings.formatCurrency(remaining, currency)} left of your limit.'
+        : 'Check your expenses and limit in settings.';
+
     await _scheduleNotification(
       id: 1,
-      title: 'Good Morning!',
-      body: 'Plan your day and money flow.',
-      hour: 8,
-      minute: 10,
+      title: 'Good Morning! Plan Your Day',
+      body: 'Good morning — plan your day expenses. $remainingMessage',
+      hour: 9,
+      minute: 30,
     );
 
-    // Morning 11:20 AM
     await _scheduleNotification(
       id: 2,
-      title: 'Mid-Morning Check',
-      body: 'How is your money flow going?',
-      hour: 11,
-      minute: 20,
+      title: 'Expense Reminder',
+      body: 'Fill in your expenses so your budget stays up to date.',
+      hour: 15,
+      minute: 30,
     );
 
-    // Evening 6:20 PM
     await _scheduleNotification(
       id: 3,
-      title: 'Evening Update',
-      body: 'Time to review your expenses.',
-      hour: 18,
-      minute: 20,
-    );
-
-    // Night 9:20 PM
-    await _scheduleNotification(
-      id: 4,
-      title: 'Night Wrap-up',
-      body: 'Enter your money flow for the day.',
-      hour: 21,
-      minute: 20,
+      title: 'Night Expense Check',
+      body: 'Reminder to log today’s expenses before bed.',
+      hour: 22,
+      minute: 30,
     );
   }
 

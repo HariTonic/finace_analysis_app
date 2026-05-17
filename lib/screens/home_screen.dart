@@ -135,38 +135,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               ],
                             ),
                           ),
-                          const SizedBox(width: 16),
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.pushNamed(context, '/settings');
-                            },
-                            child: Container(
-                              width: 64,
-                              height: 64,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF2A2A3F),
-                                shape: BoxShape.circle,
-                                image: AppSettings.getProfileImageBase64()
-                                        .isNotEmpty
-                                    ? DecorationImage(
-                                        image: MemoryImage(
-                                          base64Decode(
-                                            AppSettings.getProfileImageBase64(),
-                                          ),
-                                        ),
-                                        fit: BoxFit.cover,
-                                      )
-                                    : null,
-                              ),
-                              child: AppSettings.getProfileImageBase64().isEmpty
-                                  ? const Icon(
-                                      Icons.person,
-                                      color: Colors.white,
-                                      size: 28,
-                                    )
-                                  : null,
-                            ),
-                          ),
                         ],
                       ),
                       const SizedBox(height: 8),
