@@ -237,7 +237,7 @@ class _SmsExtractionScreenState extends State<SmsExtractionScreen> {
                     maxLines: 10,
                     decoration: InputDecoration(
                       hintText:
-                          'A/c *7022 debited Rs. 30.00\n\nBOUGHT 10 IDFCFIREQNR @ 62.71',
+                          'Paste Multiple Messages Here...\n\nExample:\n\n"Your account was debited with \$50.00 on 2024-06-01. Available balance: \$950.00."\n\n"Bought 10 shares of AAPL at \$150.00 each on 2024-06-02."',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
