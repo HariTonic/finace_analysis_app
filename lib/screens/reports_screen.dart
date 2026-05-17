@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 import '../models/investment_holding.dart';
 import '../models/transaction.dart';
 import '../utils/app_settings.dart';
+import '../utils/gold_price_service.dart';
 
 const List<Color> _chartPalette = [
   Color(0xFF7B61FF),
@@ -77,6 +78,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   late _DateRange _investmentCompareB;
 
   final http.Client _httpClient = http.Client();
+  late final GoldPriceService _goldPriceService;
   final Map<String, String> _nseHeaders = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
         'AppleWebKit/537.36 (KHTML, like Gecko) '
@@ -92,6 +94,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   void initState() {
     super.initState();
+    _goldPriceService = GoldPriceService(httpClient: _httpClient);
     final now = DateTime.now();
     _expenseCompareA = _DateRange.forTimeframe(_ReportTimeframe.currentMonth, now);
     _expenseCompareB = _DateRange.forTimeframe(_ReportTimeframe.quarter, now);
@@ -341,6 +344,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             });
             if (newSection == _ReportSection.investmentAnalysis) {
               _refreshInvestmentPrices();
+              _refreshGoldPrices();
             }
           }
         },
@@ -475,19 +479,89 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return _nseCookies.entries.map((entry) => '${entry.key}=${entry.value}').join('; ');
   }
 
+  Future<void> _refreshGoldPrices() async {
+    final investmentBox = Hive.box<InvestmentHolding>('investments');
+    final holdings = investmentBox.values.toList();
+    
+    // Find gold holdings
+    final goldHoldings = holdings
+        .where((holding) {
+          final type = holding.type.toLowerCase();
+          return type.contains('gold') || type == 'precious metal';
+        })
+        .toList();
+
+    if (goldHoldings.isEmpty) {
+      return;
+    }
+
+    // Get current gold price from the service
+    final goldPrice = await _goldPriceService.fetchGoldPricePerGram(
+      currency: AppSettings.getCurrency(),
+    );
+
+    if (goldPrice == null) {
+      return;
+    }
+
+    // Update all gold holdings with the new price
+    for (var index = 0; index < holdings.length; index++) {
+      final holding = holdings[index];
+      final type = holding.type.toLowerCase();
+      
+      if (!type.contains('gold') && type != 'precious metal') {
+        continue;
+      }
+
+      final updated = InvestmentHolding(
+        id: holding.id,
+        type: holding.type,
+        name: holding.name,
+        quantity: holding.quantity,
+        buyUnitPrice: holding.buyUnitPrice,
+        currentUnitPrice: goldPrice,
+        unitLabel: holding.unitLabel,
+        purchaseDate: holding.purchaseDate,
+        notes: holding.notes,
+        symbol: holding.symbol,
+        exchange: holding.exchange,
+      );
+      await investmentBox.putAt(index, updated);
+    }
+  }
+
   Widget _buildInvestmentAnalysis(
     List<InvestmentHolding> holdings,
     String Function(double) formatter,
   ) {
-    final stocks = _aggregateInvestmentHoldings(holdings);
-    if (stocks.isEmpty) {
+    final stocks = _aggregateInvestmentHoldings(holdings, excludeGold: true);
+    final goldHoldings = _aggregateGoldHoldings(holdings);
+
+    if (stocks.isEmpty && goldHoldings.isEmpty) {
       return _ReportCard(
         title: 'Investment Analysis',
-        subtitle: 'Compare all tracked stocks using buy and current price pairs.',
-        child: const _EmptyChart(message: 'No stock investments available.'),
+        subtitle: 'Compare all tracked investments using buy and current price pairs.',
+        child: const _EmptyChart(message: 'No investments available.'),
       );
     }
 
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (stocks.isNotEmpty)
+          _buildStockAnalysisCard(stocks, formatter),
+        if (stocks.isNotEmpty && goldHoldings.isNotEmpty)
+          const SizedBox(height: 24),
+        if (goldHoldings.isNotEmpty)
+          _buildGoldAnalysisCard(goldHoldings, formatter),
+      ],
+    );
+  }
+
+  Widget _buildStockAnalysisCard(
+    List<_AggregatedHolding> stocks,
+    String Function(double) formatter,
+  ) {
     final maxPrice = stocks.fold<double>(0, (currentMax, item) {
       return math.max(currentMax, math.max(item.avgBuyPrice, item.avgCurrentPrice));
     });
@@ -496,7 +570,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final totalProfitLoss = totalCurrent - totalInvested;
 
     return _ReportCard(
-      title: 'Investment Analysis',
+      title: 'Stock Analysis',
       subtitle: 'Compare buy price and current price for each stock holding.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -528,6 +602,58 @@ class _ReportsScreenState extends State<ReportsScreen> {
               itemBuilder: (context, index) {
                 final item = stocks[index];
                 return _buildStockBarGroup(item, maxPrice, formatter, index);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGoldAnalysisCard(
+    List<_AggregatedHolding> goldHoldings,
+    String Function(double) formatter,
+  ) {
+    final maxPrice = goldHoldings.fold<double>(0, (currentMax, item) {
+      return math.max(currentMax, math.max(item.avgBuyPrice, item.avgCurrentPrice));
+    });
+    final totalInvested = goldHoldings.fold<double>(0, (sum, item) => sum + item.totalInvestedAmount);
+    final totalCurrent = goldHoldings.fold<double>(0, (sum, item) => sum + item.totalCurrentValue);
+    final totalProfitLoss = totalCurrent - totalInvested;
+
+    return _ReportCard(
+      title: 'Gold Analysis',
+      subtitle: 'Compare buy price and current price for each gold holding.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _MetricChip(label: 'Total Invested', value: formatter(totalInvested)),
+              _MetricChip(
+                label: 'Total P/L',
+                value: '${totalProfitLoss >= 0 ? '+' : ''}${formatter(totalProfitLoss)}',
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Horizontal gold bar graph (two bars per gold item).',
+            style: TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: math.min(720, goldHoldings.length * 112.0),
+            child: ListView.separated(
+              padding: EdgeInsets.zero,
+              itemCount: goldHoldings.length,
+              physics: const ClampingScrollPhysics(),
+              separatorBuilder: (_, __) => const SizedBox(height: 24),
+              itemBuilder: (context, index) {
+                final item = goldHoldings[index];
+                return _buildGoldBarGroup(item, maxPrice, formatter, index);
               },
             ),
           ),
@@ -648,11 +774,84 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  List<_AggregatedHolding> _aggregateInvestmentHoldings(List<InvestmentHolding> holdings) {
+  Widget _buildGoldBarGroup(
+    _AggregatedHolding gold,
+    double maxPrice,
+    String Function(double) formatter,
+    int index,
+  ) {
+    const buyGradient = LinearGradient(
+      begin: Alignment.centerLeft,
+      end: Alignment.centerRight,
+      colors: [Color(0xFFFFD700), Color(0xFFFFA500)],
+    );
+    final currentGradient = gold.profitLoss >= 0
+        ? const LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [Color(0xFF00C853), Color(0xFF69F0AE)],
+          )
+        : const LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [Color(0xFFFF512F), Color(0xFFFF9A9E)],
+          );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${gold.symbol} · ${gold.name}',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Qty ${gold.totalQuantity.toStringAsFixed(2)} ${gold.unitLabel} · P/L ${formatter(gold.profitLoss)} (${gold.profitLossPercent.toStringAsFixed(1)}%)',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: gold.profitLoss >= 0 ? const Color(0xFF0A4F2D) : const Color(0xFF4F0A1A),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                gold.profitLoss >= 0 ? '+${gold.profitLossPercent.toStringAsFixed(1)}%' : '${gold.profitLossPercent.toStringAsFixed(1)}%',
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        _buildHorizontalBar('Buy', gold.avgBuyPrice, maxPrice, buyGradient, formatter),
+        const SizedBox(height: 12),
+        _buildHorizontalBar('Current', gold.avgCurrentPrice, maxPrice, currentGradient, formatter),
+      ],
+    );
+  }
+
+  List<_AggregatedHolding> _aggregateInvestmentHoldings(List<InvestmentHolding> holdings, {bool excludeGold = false}) {
     final grouped = <String, _AggregatedHolding>{};
     for (final holding in holdings) {
+      final holdingType = holding.type.toLowerCase();
+      
+      if (excludeGold && (holdingType.contains('gold') || holdingType == 'precious metal')) {
+        continue;
+      }
+      
       final symbol = holding.symbol.trim().toUpperCase();
-      if (symbol.isEmpty && holding.type.toLowerCase() != 'stocks') {
+      if (symbol.isEmpty && holdingType != 'stocks') {
         continue;
       }
       final key = symbol.isNotEmpty ? symbol : holding.name.trim();
@@ -670,6 +869,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           totalQuantity: holding.quantity,
           totalInvestedAmount: invested,
           totalCurrentValue: currentValue,
+          unitLabel: holding.unitLabel,
         );
       } else {
         grouped[key] = existing.copyWith(
@@ -682,6 +882,46 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     final items = grouped.values.toList()
       ..sort((a, b) => a.symbol.compareTo(b.symbol));
+    return items;
+  }
+
+  List<_AggregatedHolding> _aggregateGoldHoldings(List<InvestmentHolding> holdings) {
+    final grouped = <String, _AggregatedHolding>{};
+    for (final holding in holdings) {
+      final holdingType = holding.type.toLowerCase();
+      
+      if (!holdingType.contains('gold') && holdingType != 'precious metal') {
+        continue;
+      }
+      
+      final key = holding.name.trim();
+      if (key.isEmpty) {
+        continue;
+      }
+
+      final existing = grouped[key];
+      final invested = holding.quantity * holding.buyUnitPrice;
+      final currentValue = holding.quantity * holding.currentUnitPrice;
+      if (existing == null) {
+        grouped[key] = _AggregatedHolding(
+          symbol: 'XAU',
+          name: holding.name,
+          totalQuantity: holding.quantity,
+          totalInvestedAmount: invested,
+          totalCurrentValue: currentValue,
+          unitLabel: holding.unitLabel,
+        );
+      } else {
+        grouped[key] = existing.copyWith(
+          addQuantity: holding.quantity,
+          addInvestedAmount: invested,
+          addCurrentValue: currentValue,
+        );
+      }
+    }
+
+    final items = grouped.values.toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
     return items;
   }
 
@@ -1561,6 +1801,7 @@ class _AggregatedHolding {
     required this.totalQuantity,
     required this.totalInvestedAmount,
     required this.totalCurrentValue,
+    this.unitLabel = '',
   });
 
   final String symbol;
@@ -1568,6 +1809,7 @@ class _AggregatedHolding {
   final double totalQuantity;
   final double totalInvestedAmount;
   final double totalCurrentValue;
+  final String unitLabel;
 
   double get avgBuyPrice => totalQuantity == 0 ? 0 : totalInvestedAmount / totalQuantity;
   double get avgCurrentPrice => totalQuantity == 0 ? 0 : totalCurrentValue / totalQuantity;
@@ -1585,6 +1827,7 @@ class _AggregatedHolding {
       totalQuantity: totalQuantity + (addQuantity ?? 0),
       totalInvestedAmount: totalInvestedAmount + (addInvestedAmount ?? 0),
       totalCurrentValue: totalCurrentValue + (addCurrentValue ?? 0),
+      unitLabel: unitLabel,
     );
   }
 }
