@@ -5,6 +5,7 @@ import '../models/investment_holding.dart';
 import '../utils/transaction_parser.dart';
 import '../utils/import_history.dart';
 import '../utils/app_settings.dart';
+import '../widgets/scroll_shadow_wrapper.dart';
 
 class SmsExtractionScreen extends StatefulWidget {
   const SmsExtractionScreen({super.key});
@@ -217,11 +218,13 @@ class _SmsExtractionScreenState extends State<SmsExtractionScreen> {
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+          : ScrollShadowWrapper(
+              builder: (controller) => SingleChildScrollView(
+                controller: controller,
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   const Text(
                     'Paste Messages',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -495,6 +498,7 @@ class _SmsExtractionScreenState extends State<SmsExtractionScreen> {
                 ],
               ),
             ),
+          ),
     );
   }
 }

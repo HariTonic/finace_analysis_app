@@ -10,6 +10,7 @@ import '../utils/app_settings.dart';
 import '../utils/backup_sync_service.dart';
 import '../utils/notification_service.dart';
 import '../widgets/running_text.dart';
+import '../widgets/scroll_shadow_wrapper.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -112,9 +113,11 @@ class _HomeScreenState extends State<HomeScreen> {
             return Container(
               color: const Color(0xFF0D1124),
               child: SafeArea(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(16.0, 20.0, 16.0, 80.0),
-                  child: Column(
+                child: ScrollShadowWrapper(
+                  builder: (controller) => SingleChildScrollView(
+                    controller: controller,
+                    padding: const EdgeInsets.fromLTRB(16.0, 20.0, 16.0, 80.0),
+                    child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
@@ -417,7 +420,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-            );
+            ),
+          );
           },
         );
       },

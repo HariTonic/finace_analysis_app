@@ -12,6 +12,7 @@ import '../models/investment_holding.dart';
 import '../models/transaction.dart';
 import '../utils/app_settings.dart';
 import '../utils/gold_price_service.dart';
+import '../widgets/scroll_shadow_wrapper.dart';
 
 const List<Color> _chartPalette = [
   Color(0xFF7B61FF),
@@ -121,10 +122,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
             final currencyCode = AppSettings.getCurrency();
             String formatter(double value) => AppSettings.formatCurrency(value, currencyCode);
 
-            return ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
-              children: [
-                _buildHeader(),
+            return ScrollShadowWrapper(
+              builder: (controller) => ListView(
+                controller: controller,
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+                children: [
+                  _buildHeader(),
                 const SizedBox(height: 18),
                 _buildSectionSelector(),
                 const SizedBox(height: 18),
@@ -132,8 +135,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 const SizedBox(height: 18),
                 ..._buildSectionContent(transactions, holdings, formatter),
               ],
-            );
-          },
+            ),
+          );
+        },
         );
       },
     );

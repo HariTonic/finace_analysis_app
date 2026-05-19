@@ -10,6 +10,7 @@ import '../models/transaction.dart';
 import '../utils/app_settings.dart';
 import '../utils/backup_sync_service.dart';
 import '../widgets/running_text.dart';
+import '../widgets/scroll_shadow_wrapper.dart';
 
 class TransactionsScreen extends StatefulWidget {
   const TransactionsScreen({super.key, this.onNavigateHome});
@@ -164,15 +165,17 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                     );
                   }
 
-                  return Container(
-                    margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF161626),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: ListView.separated(
-                      shrinkWrap: false,
-                      itemCount: transactions.length,
+                  return ScrollShadowWrapper(
+                    builder: (controller) => Container(
+                      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF161626),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: ListView.separated(
+                        controller: controller,
+                        shrinkWrap: false,
+                        itemCount: transactions.length,
                       separatorBuilder: (context, index) => const Divider(
                         height: 1,
                         color: Color(0xFF2A2A3F),
@@ -184,8 +187,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         return _buildTransactionTile(transaction, activeCurrency);
                       },
                     ),
-                  );
-                },
+                  ),
+                );
+              },
               ),
             ),
           ],
