@@ -22,8 +22,64 @@ class TransactionsScreen extends StatefulWidget {
 }
 
 class _TransactionsScreenState extends State<TransactionsScreen> {
+  static const int _recordsPerBatch = 50;
+  
   String _filterType = 'all'; // all, income, expense, investment
   DateTime? _filterDate;
+  late ScrollController _scrollController;
+  
+  List<Transaction> _displayedTransactions = [];
+  List<Transaction> _allFilteredTransactions = [];
+  int _currentBatchIndex = 0;
+  bool _isLoadingMore = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 500) {
+      _loadMoreRecords();
+    }
+  }
+
+  void _loadMoreRecords() {
+    if (_isLoadingMore) return;
+    
+    final nextIndex = _currentBatchIndex + 1;
+    final startIdx = nextIndex * _recordsPerBatch;
+    
+    if (startIdx < _allFilteredTransactions.length) {
+      setState(() {
+        _isLoadingMore = true;
+        _currentBatchIndex = nextIndex;
+        final endIdx = (startIdx + _recordsPerBatch)
+            .clamp(0, _allFilteredTransactions.length);
+        _displayedTransactions.addAll(
+          _allFilteredTransactions.sublist(startIdx, endIdx),
+        );
+        _isLoadingMore = false;
+      });
+    }
+  }
+
+  void _resetAndLoadInitial(List<Transaction> transactions) {
+    _allFilteredTransactions = transactions;
+    _displayedTransactions = transactions
+        .take(_recordsPerBatch)
+        .toList();
+    _currentBatchIndex = 0;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -88,6 +144,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                             onChanged: (value) {
                               setState(() {
                                 _filterType = value!;
+                                _currentBatchIndex = 0;
+                                _displayedTransactions = [];
                               });
                             },
                           ),
@@ -106,6 +164,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                             if (picked != null) {
                               setState(() {
                                 _filterDate = picked;
+                                _currentBatchIndex = 0;
+                                _displayedTransactions = [];
                               });
                             }
                           },
@@ -128,7 +188,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                       ),
                       if (_filterDate != null)
                         IconButton(
-                          onPressed: () => setState(() => _filterDate = null),
+                          onPressed: () => setState(() {
+                            _filterDate = null;
+                            _currentBatchIndex = 0;
+                            _displayedTransactions = [];
+                          }),
                           icon: const Icon(Icons.clear_rounded, color: Colors.grey, size: 20),
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
@@ -153,10 +217,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   }
                   
                   transactions.sort((a, b) => b.date.compareTo(a.date));
+                  _resetAndLoadInitial(transactions);
                   
                   final activeCurrency = AppSettings.getCurrency();
 
-                  if (transactions.isEmpty) {
+                  if (_displayedTransactions.isEmpty) {
                     return Center(
                       child: Text(
                         'No transactions found',
@@ -172,24 +237,46 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         color: const Color(0xFF161626),
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: ListView.separated(
-                        controller: controller,
-                        shrinkWrap: false,
-                        itemCount: transactions.length,
-                      separatorBuilder: (context, index) => const Divider(
-                        height: 1,
-                        color: Color(0xFF2A2A3F),
-                        indent: 16,
-                        endIndent: 16,
+                      child: Scrollbar(
+                        controller: _scrollController,
+                        thickness: 4,
+                        radius: const Radius.circular(2),
+                        child: ListView.separated(
+                          controller: _scrollController,
+                          shrinkWrap: false,
+                          itemCount: _displayedTransactions.length + (_currentBatchIndex * _recordsPerBatch < _allFilteredTransactions.length ? 1 : 0),
+                          separatorBuilder: (context, index) => const Divider(
+                            height: 1,
+                            color: Color(0xFF2A2A3F),
+                            indent: 16,
+                            endIndent: 16,
+                          ),
+                          itemBuilder: (context, index) {
+                            if (index == _displayedTransactions.length) {
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                child: Center(
+                                  child: SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.grey[600]!,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+                            final transaction = _displayedTransactions[index];
+                            return _buildTransactionTile(transaction, activeCurrency);
+                          },
+                        ),
                       ),
-                      itemBuilder: (context, index) {
-                        final transaction = transactions[index];
-                        return _buildTransactionTile(transaction, activeCurrency);
-                      },
                     ),
-                  ),
-                );
-              },
+                  );
+                },
               ),
             ),
           ],
@@ -308,8 +395,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     if (category == 'Food') return Icons.restaurant;
     if (category == 'Transport') return Icons.directions_bus_rounded;
     if (category == 'Vehicle') return Icons.directions_car_filled_rounded;
-    if (category == 'Personal & Shopping')
+    if (category == 'Personal & Shopping') {
       return Icons.shopping_bag_rounded;
+    }
     if (category == 'Bills & Subscriptions') return Icons.receipt_long_rounded;
     if (category == 'Medical') return Icons.local_hospital_rounded;
     if (category == 'Education') return Icons.school_rounded;

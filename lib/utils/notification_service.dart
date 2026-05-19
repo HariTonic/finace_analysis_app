@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
 import '../models/transaction.dart';
@@ -12,11 +15,22 @@ class NotificationService {
   static Future<void> initialize() async {
     tz.initializeTimeZones();
 
+    if (Platform.isAndroid) {
+      final permissionStatus = await Permission.notification.status;
+      if (!permissionStatus.isGranted) {
+        await Permission.notification.request();
+      }
+    }
+
     const AndroidInitializationSettings androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
 
     const DarwinInitializationSettings iosSettings =
-        DarwinInitializationSettings();
+        DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
 
     const InitializationSettings settings =
         InitializationSettings(android: androidSettings, iOS: iosSettings);

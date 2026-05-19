@@ -56,12 +56,21 @@ class _HomeScreenState extends State<HomeScreen> {
                 .fold(0.0, (sum, t) => sum + t.amount);
             final monthlyLimit = AppSettings.getMonthlySpendingLimit();
 
-            // Progress bar: shows remaining monthly limit
+            // Progress bar: shows expense limit usage only
             double progressValue = 0.0;
             if (monthlyLimit > 0) {
-              progressValue = ((monthlyLimit - monthlyExpense) / monthlyLimit)
-                  .clamp(0.0, 1.0);
+              progressValue = (monthlyExpense / monthlyLimit).clamp(0.0, 1.0);
             }
+
+            final expenseLimitText = monthlyLimit > 0
+                ? '${AppSettings.formatCurrency(monthlyExpense, activeCurrency)} / ${AppSettings.formatCurrency(monthlyLimit, activeCurrency)}'
+                : 'Set a monthly expense limit in Settings';
+
+            final progressGradientColors = progressValue < 0.5
+                ? [Colors.green[400]!, Colors.green[700]!]
+                : progressValue < 0.75
+                    ? [Colors.amber[400]!, Colors.orange[600]!]
+                    : [Colors.red[400]!, Colors.red[700]!];
 
             // Check for notifications
             if (monthlyLimit > 0) {
@@ -141,6 +150,28 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                       const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Expense limit',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            expenseLimitText,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
                       Container(
                         height: 8,
                         width: double.infinity,
@@ -158,10 +189,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: Container(
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
-                                    colors: [
-                                      Colors.yellow[600]!,
-                                      Colors.green[600]!,
-                                    ],
+                                    colors: progressGradientColors,
                                     begin: Alignment.centerLeft,
                                     end: Alignment.centerRight,
                                   ),

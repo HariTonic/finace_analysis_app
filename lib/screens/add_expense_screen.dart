@@ -484,14 +484,19 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   }
 
   Widget _buildDateCard() {
+    final missedDate = _isMissedDate;
+
     return GestureDetector(
       onTap: _pickDate,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
         decoration: BoxDecoration(
-          color: const Color(0xFF1E1E1E),
+          color: missedDate ? const Color(0xFF2B1418) : const Color(0xFF1E1E1E),
           borderRadius: BorderRadius.circular(22),
+          border: missedDate
+              ? Border.all(color: const Color(0xFFEE6A62), width: 2)
+              : null,
         ),
         child: Row(
           children: [
@@ -511,6 +516,17 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                       fontWeight: FontWeight.w500,
                     ),
                   ),
+                  if (missedDate) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'Missed expense entry for this date',
+                      style: TextStyle(
+                        color: const Color(0xFFEE6A62).withOpacity(0.90),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -748,6 +764,25 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     if (picked != null) {
       setState(() => _date = picked);
     }
+  }
+
+  bool get _isMissedDate {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return _date.isBefore(today) && !_hasExpenseForDate(_date);
+  }
+
+  bool _hasExpenseForDate(DateTime date) {
+    final box = Hive.box<Transaction>('transactions');
+    return box.values.any((transaction) {
+      final transactionDate = DateTime(
+        transaction.date.year,
+        transaction.date.month,
+        transaction.date.day,
+      );
+      final selectedDate = DateTime(date.year, date.month, date.day);
+      return transaction.type == 'expense' && transactionDate == selectedDate;
+    });
   }
 
   String _formattedDateLabel() {
