@@ -32,6 +32,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   List<Transaction> _allFilteredTransactions = [];
   int _currentBatchIndex = 0;
   bool _isLoadingMore = false;
+  bool _hasInitialized = false;
 
   @override
   void initState() {
@@ -59,18 +60,21 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     final nextIndex = _currentBatchIndex + 1;
     final startIdx = nextIndex * _recordsPerBatch;
     
-    if (startIdx < _allFilteredTransactions.length) {
-      setState(() {
-        _isLoadingMore = true;
-        _currentBatchIndex = nextIndex;
-        final endIdx = (startIdx + _recordsPerBatch)
-            .clamp(0, _allFilteredTransactions.length);
-        _displayedTransactions.addAll(
-          _allFilteredTransactions.sublist(startIdx, endIdx),
-        );
-        _isLoadingMore = false;
-      });
+    // Only load if there are more records to fetch
+    if (startIdx >= _allFilteredTransactions.length) {
+      return; // No more records to load
     }
+    
+    setState(() {
+      _isLoadingMore = true;
+      _currentBatchIndex = nextIndex;
+      final endIdx = (startIdx + _recordsPerBatch)
+          .clamp(0, _allFilteredTransactions.length);
+      _displayedTransactions.addAll(
+        _allFilteredTransactions.sublist(startIdx, endIdx),
+      );
+      _isLoadingMore = false;
+    });
   }
 
   void _resetAndLoadInitial(List<Transaction> transactions) {
@@ -79,6 +83,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         .take(_recordsPerBatch)
         .toList();
     _currentBatchIndex = 0;
+    _hasInitialized = true;
   }
 
   @override
@@ -217,7 +222,14 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   }
                   
                   transactions.sort((a, b) => b.date.compareTo(a.date));
-                  _resetAndLoadInitial(transactions);
+                  
+                  // Only reset if filter criteria changed (not on every rebuild)
+                  if (!_hasInitialized || 
+                      _allFilteredTransactions.length != transactions.length ||
+                      (_allFilteredTransactions.isNotEmpty && transactions.isNotEmpty && 
+                       _allFilteredTransactions.first.id != transactions.first.id)) {
+                    _resetAndLoadInitial(transactions);
+                  }
                   
                   final activeCurrency = AppSettings.getCurrency();
 
@@ -229,6 +241,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                       ),
                     );
                   }
+
+                  // Check if there are more records to load
+                  final hasMoreRecords = (_currentBatchIndex + 1) * _recordsPerBatch < _allFilteredTransactions.length;
 
                   return ScrollShadowWrapper(
                     builder: (controller) => Container(
@@ -244,7 +259,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         child: ListView.separated(
                           controller: _scrollController,
                           shrinkWrap: false,
-                          itemCount: _displayedTransactions.length + (_currentBatchIndex * _recordsPerBatch < _allFilteredTransactions.length ? 1 : 0),
+                          itemCount: _displayedTransactions.length + (hasMoreRecords && _isLoadingMore ? 1 : 0),
                           separatorBuilder: (context, index) => const Divider(
                             height: 1,
                             color: Color(0xFF2A2A3F),
