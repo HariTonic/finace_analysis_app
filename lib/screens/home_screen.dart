@@ -56,19 +56,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 .fold(0.0, (sum, t) => sum + t.amount);
             final monthlyLimit = AppSettings.getMonthlySpendingLimit();
 
-            // Progress bar: shows expense limit usage only
+            // Progress bar: shows remaining budget (decreases as spending increases)
             double progressValue = 0.0;
             if (monthlyLimit > 0) {
-              progressValue = (monthlyExpense / monthlyLimit).clamp(0.0, 1.0);
+              progressValue = ((monthlyLimit - monthlyExpense) / monthlyLimit).clamp(0.0, 1.0);
             }
 
             final expenseLimitText = monthlyLimit > 0
                 ? '${AppSettings.formatCurrency(monthlyExpense, activeCurrency)} / ${AppSettings.formatCurrency(monthlyLimit, activeCurrency)}'
                 : 'Set a monthly expense limit in Settings';
 
-            final progressGradientColors = progressValue < 0.5
+            final progressGradientColors = progressValue > 0.5
                 ? [Colors.green[400]!, Colors.green[700]!]
-                : progressValue < 0.75
+                : progressValue > 0.25
                     ? [Colors.amber[400]!, Colors.orange[600]!]
                     : [Colors.red[400]!, Colors.red[700]!];
 

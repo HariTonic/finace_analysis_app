@@ -549,15 +549,140 @@ class _ReportsScreenState extends State<ReportsScreen> {
       );
     }
 
+    return _ReportCard(
+      title: 'Investment Analysis',
+      subtitle: 'Compare all tracked investments using buy and current price pairs.',
+      child: SizedBox(
+        height: 600,
+        child: Scrollbar(
+          thickness: 4,
+          radius: const Radius.circular(2),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.zero,
+            physics: const ClampingScrollPhysics(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (goldHoldings.isNotEmpty)
+                  _buildGoldAnalysisContent(goldHoldings, formatter),
+                if (goldHoldings.isNotEmpty && stocks.isNotEmpty)
+                  const SizedBox(height: 24),
+                if (stocks.isNotEmpty)
+                  _buildStockAnalysisContent(stocks, formatter),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStockAnalysisContent(
+    List<_AggregatedHolding> stocks,
+    String Function(double) formatter,
+  ) {
+    final maxPrice = stocks.fold<double>(0, (currentMax, item) {
+      return math.max(currentMax, math.max(item.avgBuyPrice, item.avgCurrentPrice));
+    });
+    final totalInvested = stocks.fold<double>(0, (sum, item) => sum + item.totalInvestedAmount);
+    final totalCurrent = stocks.fold<double>(0, (sum, item) => sum + item.totalCurrentValue);
+    final totalProfitLoss = totalCurrent - totalInvested;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (stocks.isNotEmpty)
-          _buildStockAnalysisCard(stocks, formatter),
-        if (stocks.isNotEmpty && goldHoldings.isNotEmpty)
-          const SizedBox(height: 24),
-        if (goldHoldings.isNotEmpty)
-          _buildGoldAnalysisCard(goldHoldings, formatter),
+        const Text(
+          'Stock Analysis',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'Compare buy price and current price for each stock holding.',
+          style: TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            _MetricChip(label: 'Total Invested', value: formatter(totalInvested)),
+            _MetricChip(
+              label: 'Total P/L',
+              value: '${totalProfitLoss >= 0 ? '+' : ''}${formatter(totalProfitLoss)}',
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        ListView.separated(
+          padding: EdgeInsets.zero,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: stocks.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 24),
+          itemBuilder: (context, index) {
+            final item = stocks[index];
+            return _buildStockBarGroup(item, maxPrice, formatter, index);
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGoldAnalysisContent(
+    List<_AggregatedHolding> goldHoldings,
+    String Function(double) formatter,
+  ) {
+    final maxPrice = goldHoldings.fold<double>(0, (currentMax, item) {
+      return math.max(currentMax, math.max(item.avgBuyPrice, item.avgCurrentPrice));
+    });
+    final totalInvested = goldHoldings.fold<double>(0, (sum, item) => sum + item.totalInvestedAmount);
+    final totalCurrent = goldHoldings.fold<double>(0, (sum, item) => sum + item.totalCurrentValue);
+    final totalProfitLoss = totalCurrent - totalInvested;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Gold Analysis',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'Compare buy price and current price for each gold holding.',
+          style: TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            _MetricChip(label: 'Total Invested', value: formatter(totalInvested)),
+            _MetricChip(
+              label: 'Total P/L',
+              value: '${totalProfitLoss >= 0 ? '+' : ''}${formatter(totalProfitLoss)}',
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        ListView.separated(
+          padding: EdgeInsets.zero,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: goldHoldings.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 24),
+          itemBuilder: (context, index) {
+            final item = goldHoldings[index];
+            return _buildGoldBarGroup(item, maxPrice, formatter, index);
+          },
+        ),
       ],
     );
   }
