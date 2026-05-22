@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:intl/intl.dart';
 import 'add_expense_screen.dart';
 import 'add_income_screen.dart';
 import 'add_investment_screen.dart';
@@ -90,9 +91,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   transaction.date.day == now.day;
             }).toList()
               ..sort((a, b) => b.date.compareTo(a.date));
-            final holdings = investmentBox.values.toList();
-            final holdingsCurrentValue = holdings.fold<double>(
-                0, (sum, item) => sum + item.currentValue);
+            final todayIncome = recentTransactions
+                .where((t) => t.type == 'income')
+                .fold(0.0, (sum, t) => sum + t.amount);
+            final todayExpense = recentTransactions
+                .where((t) => t.type == 'expense')
+                .fold(0.0, (sum, t) => sum + t.amount);
+            final todayInvestment = recentTransactions
+                .where((t) => t.type == 'investment')
+                .fold(0.0, (sum, t) => sum + t.amount);
+            final todayNet = todayIncome - todayExpense - todayInvestment;
+            final dailyBudget = monthlyLimit > 0 ? monthlyLimit / DateUtils.getDaysInMonth(now.year, now.month) : 0.0;
+            final dailyBudgetProgress = dailyBudget > 0
+                ? (todayExpense / dailyBudget).clamp(0.0, 1.6)
+                : 0.0;
 
             final installDate = AppSettings.getInstallDate();
             final latestEntryDate = transactions.isNotEmpty
@@ -229,13 +241,22 @@ class _HomeScreenState extends State<HomeScreen> {
                       Container(
                         width: double.infinity,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1B1B2E),
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              const Color(0xFF1A223A),
+                              const Color(0xFF121A2F),
+                              todayNet >= 0 ? const Color(0xFF132B25) : const Color(0xFF311A23),
+                            ],
+                          ),
                           borderRadius: BorderRadius.circular(24),
                           boxShadow: [
-                            const BoxShadow(
-                              color: Color.fromRGBO(0, 0, 0, 0.18),
-                              blurRadius: 16,
-                              offset: Offset(0, 6),
+                            BoxShadow(
+                              color: (todayNet >= 0 ? Colors.greenAccent : Colors.redAccent)
+                                  .withValues(alpha: 0.08),
+                              blurRadius: 24,
+                              offset: const Offset(0, 10),
                             ),
                           ],
                         ),
@@ -243,207 +264,171 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('DAILY TRACKER',
-                                style: TextStyle(
-                                    color: Colors.blueAccent,
-                                    letterSpacing: 1.8,
-                                    fontWeight: FontWeight.w600)),
-                            const SizedBox(height: 16),
-                            if (pendingDays <= 0)
-                              const Text(
-                                "You're all caught up for today",
-                                style: TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white),
-                              )
-                            else
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.warning_rounded,
-                                          color: Colors.orangeAccent, size: 24),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          'No entry for today! Update now.',
-                                          style: const TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.orangeAccent),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    '$pendingDays day${pendingDays == 1 ? '' : 's'} pending',
-                                    style: const TextStyle(
-                                        fontSize: 14, color: Colors.grey),
-                                  ),
-                                ],
-                              ),
-
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      Row(
-                        children: [
-                          Expanded(
-                              child: _buildActionCard(context, Icons.wallet,
-                                  'Add Expense', '/add-expense')),
-                          const SizedBox(width: 12),
-                          Expanded(
-                              child: _buildActionCard(
-                                  context,
-                                  Icons.attach_money,
-                                  'Add Income',
-                                  '/add-income')),
-                          const SizedBox(width: 12),
-                          Expanded(
-                              child: _buildActionCard(context, Icons.show_chart,
-                                  'Add Investment', '/add-investment')),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF7A85FF),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          onPressed: () async {
-                            final result = await Navigator.pushNamed(
-                              context,
-                              '/extract-sms',
-                            );
-                            if (result == true) {
-                              // Refresh the home screen if transactions were imported
-                              setState(() {});
-                            }
-                          },
-                          icon: const Icon(Icons.sms, color: Colors.white),
-                          label: const Text(
-                            'Import from Messages',
-                            style: TextStyle(color: Colors.white, fontSize: 14),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      const Text('Recent Transactions',
-                          style: TextStyle(
-                              fontSize: 20, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 16),
-                      if (recentTransactions.isEmpty)
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF161626),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Text('No transactions for today yet.',
-                              style: TextStyle(color: Colors.grey)),
-                        )
-                      else
-                        Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF161626),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: LimitedBox(
-                            maxHeight: 400,
-                            child: ListView.separated(
-                              shrinkWrap: true,
-                              physics: recentTransactions.length > 5
-                                  ? const AlwaysScrollableScrollPhysics()
-                                  : const NeverScrollableScrollPhysics(),
-                              itemCount: recentTransactions.length,
-                              separatorBuilder: (context, index) =>
-                                  const Divider(
-                                height: 1,
-                                color: Color(0xFF2A2A3F),
-                              ),
-                              itemBuilder: (context, index) =>
-                                  _buildTransactionTile(
-                                      recentTransactions[index]),
-                            ),
-                          ),
-                        ),
-                      const SizedBox(height: 24),
-                      Container(
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1B1B2E),
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('DAILY TOTAL SUMMARY',
-                                style: TextStyle(
-                                    color: Colors.grey, letterSpacing: 1.6)),
-                            const SizedBox(height: 16),
-                            Text(
-                              signAmount(
-                                  totalIncome - totalExpense - totalInvestment),
-                              style: TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.bold,
-                                color: totalIncome -
-                                            totalExpense -
-                                            totalInvestment <
-                                        0
-                                    ? Colors.redAccent
-                                    : Colors.greenAccent,
-                              ),
-                            ),
-                            const SizedBox(height: 18),
-                            if (holdings.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 14),
-                                child: Text(
-                                  'Current investment value: ${formatAmount(holdingsCurrentValue)}',
-                                  style: const TextStyle(
-                                      color: Colors.white70, fontSize: 14),
-                                ),
-                              ),
                             Row(
                               children: [
-                                Expanded(
-                                  child: _summaryStat(
-                                      'Income',
-                                      formatAmount(totalIncome),
-                                      Colors.greenAccent),
+                                const Expanded(
+                                  child: Text(
+                                    "Today's Summary",
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
                                 ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: _summaryStat(
-                                      'Expense',
-                                      formatAmount(totalExpense),
-                                      Colors.redAccent),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: _summaryStat(
-                                      'Invest',
-                                      formatAmount(totalInvestment),
-                                      Colors.lightBlueAccent),
+                                _statusPill(
+                                  label: recentTransactions.isEmpty
+                                      ? 'No activity'
+                                      : pendingDays <= 0
+                                          ? 'Updated today'
+                                          : '$pendingDays day${pendingDays == 1 ? '' : 's'} pending',
+                                  color: recentTransactions.isEmpty
+                                      ? Colors.blueGrey
+                                      : pendingDays <= 0
+                                          ? Colors.greenAccent
+                                          : Colors.orangeAccent,
                                 ),
                               ],
                             ),
-
+                            const SizedBox(height: 8),
+                            Text(
+                              recentTransactions.isEmpty
+                                  ? 'No transactions recorded yet for today.'
+                                  : 'Your live snapshot for ${DateFormat('dd MMM').format(now)}.',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.7),
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            Text(
+                              signAmount(todayNet),
+                              style: TextStyle(
+                                fontSize: 30,
+                                fontWeight: FontWeight.w900,
+                                color: todayNet >= 0 ? Colors.greenAccent : Colors.orangeAccent,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Net today',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.68),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 18),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _todayMiniStat(
+                                    'Income',
+                                    formatAmount(todayIncome),
+                                    const Color(0xFF10B981),
+                                    Icons.south_west_rounded,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _todayMiniStat(
+                                    'Expense',
+                                    formatAmount(todayExpense),
+                                    const Color(0xFFEF4444),
+                                    Icons.north_east_rounded,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _todayMiniStat(
+                                    'Invest',
+                                    formatAmount(todayInvestment),
+                                    const Color(0xFF3B82F6),
+                                    Icons.show_chart_rounded,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 18),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  dailyBudget > 0 ? 'Today budget' : 'Today spending',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.75),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  dailyBudget > 0
+                                      ? '${formatAmount(todayExpense)} / ${formatAmount(dailyBudget)}'
+                                      : formatAmount(todayExpense),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(999),
+                              child: LinearProgressIndicator(
+                                value: dailyBudget > 0 ? dailyBudgetProgress.clamp(0.0, 1.0) : 0,
+                                minHeight: 10,
+                                backgroundColor: Colors.white.withValues(alpha: 0.08),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  dailyBudget <= 0
+                                      ? const Color(0xFF64748B)
+                                      : dailyBudgetProgress < 0.7
+                                          ? const Color(0xFF10B981)
+                                          : dailyBudgetProgress < 1
+                                              ? const Color(0xFFF59E0B)
+                                              : const Color(0xFFEF4444),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 18),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: () => Navigator.pushNamed(
+                                  context,
+                                  recentTransactions.isEmpty ? '/add-expense' : '/add-income',
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF7A85FF),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                                icon: Icon(
+                                  recentTransactions.isEmpty ? Icons.add_card_rounded : Icons.add_rounded,
+                                ),
+                                label: Text(
+                                  recentTransactions.isEmpty ? 'Add today\'s first entry' : 'Add another entry',
+                                  style: const TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
+                      const SizedBox(height: 24),
+                      _buildQuickActionsRow(context),
+                      const SizedBox(height: 16),
+                      _buildToolsCard(context),
+                      const SizedBox(height: 24),
+                      const Text('Today\'s Transactions',
+                          style: TextStyle(
+                              fontSize: 20, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 16),
+                      _buildRecentTransactionsSection(recentTransactions),
                     ],
                   ),
                 ),
@@ -490,6 +475,216 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActionsRow(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildActionCard(
+            context,
+            Icons.wallet,
+            'Add Expense',
+            '/add-expense',
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _buildActionCard(
+            context,
+            Icons.attach_money,
+            'Add Income',
+            '/add-income',
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _buildActionCard(
+            context,
+            Icons.show_chart,
+            'Add Investment',
+            '/add-investment',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildToolsCard(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF161626),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2A2A3F),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.sms_rounded, color: Colors.white, size: 18),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Tools',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Import transactions from your messages when you need a quick bulk update.',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.68),
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          TextButton(
+            onPressed: () async {
+              final result = await Navigator.pushNamed(
+                context,
+                '/extract-sms',
+              );
+              if (result == true) {
+                setState(() {});
+              }
+            },
+            style: TextButton.styleFrom(
+              backgroundColor: const Color(0xFF7A85FF).withValues(alpha: 0.14),
+              foregroundColor: const Color(0xFFB7BEFF),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            child: const Text(
+              'Import SMS',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecentTransactionsSection(List<Transaction> recentTransactions) {
+    if (recentTransactions.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF161626),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Text(
+          'No transactions for today yet.',
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF161626),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: LimitedBox(
+        maxHeight: 400,
+        child: ListView.separated(
+          shrinkWrap: true,
+          physics: recentTransactions.length > 5
+              ? const AlwaysScrollableScrollPhysics()
+              : const NeverScrollableScrollPhysics(),
+          itemCount: recentTransactions.length,
+          separatorBuilder: (context, index) => const Divider(
+            height: 1,
+            color: Color(0xFF2A2A3F),
+          ),
+          itemBuilder: (context, index) =>
+              _buildTransactionTile(recentTransactions[index]),
+        ),
+      ),
+    );
+  }
+
+  Widget _statusPill({
+    required String label,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _todayMiniStat(String label, String value, Color accent, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: accent, size: 16),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.68),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -702,26 +897,4 @@ class _HomeScreenState extends State<HomeScreen> {
     return Icons.category;
   }
 
-  Widget _summaryStat(String label, String value, Color valueColor) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFF2A2A3F),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label,
-              style: const TextStyle(color: Colors.white60, fontSize: 11)),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-                color: valueColor, fontWeight: FontWeight.w700, fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
 }

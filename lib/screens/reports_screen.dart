@@ -45,6 +45,31 @@ LinearGradient _chartGradientAt(int index) {
 
 Color _chartColorAt(int index) => _chartPalette[index % _chartPalette.length];
 
+const Map<String, Color> _semanticCategoryColors = {
+  'balance:expenses': Color(0xFFEF4444),
+  'balance:investments': Color(0xFF10B981),
+  'balance:in-hand': Color(0xFF6C5CE7),
+  'food': Color(0xFFF59E0B),
+  'dining': Color(0xFFF59E0B),
+  'grocery': Color(0xFFF59E0B),
+  'transport': Color(0xFF3B82F6),
+  'travel': Color(0xFF3B82F6),
+  'fuel': Color(0xFF3B82F6),
+  'bill': Color(0xFFEF4444),
+  'utility': Color(0xFFEF4444),
+  'rent': Color(0xFFEF4444),
+  'emi': Color(0xFFEF4444),
+  'health': Color(0xFFEC4899),
+  'medical': Color(0xFFEC4899),
+  'shopping': Color(0xFF8B5CF6),
+  'entertainment': Color(0xFF14B8A6),
+  'education': Color(0xFF6366F1),
+  'investment': Color(0xFF10B981),
+  'saving': Color(0xFF10B981),
+  'cash': Color(0xFF6C5CE7),
+  'salary': Color(0xFF10B981),
+};
+
 int _paletteIndexForKey(String key) {
   var hash = 0;
   for (final codeUnit in key.toLowerCase().codeUnits) {
@@ -55,7 +80,29 @@ int _paletteIndexForKey(String key) {
 
 LinearGradient _chartGradientForKey(String key) => _chartGradientAt(_paletteIndexForKey(key));
 
-Color _chartColorForKey(String key) => _chartColorAt(_paletteIndexForKey(key));
+Color _chartColorForKey(String key) {
+  final normalizedKey = key.toLowerCase();
+  for (final entry in _semanticCategoryColors.entries) {
+    if (normalizedKey.contains(entry.key)) {
+      return entry.value;
+    }
+  }
+  return _chartColorAt(_paletteIndexForKey(key));
+}
+
+LinearGradient _semanticGradientForKey(String key) {
+  final color = _chartColorForKey(key);
+  return LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      _lighten(color, 0.16),
+      color,
+      _darken(color, 0.08),
+    ],
+    stops: const [0.0, 0.58, 1.0],
+  );
+}
 
 Color _lighten(Color color, double amount) {
   final hsl = HSLColor.fromColor(color);
@@ -133,62 +180,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
             String formatter(double value) => AppSettings.formatCurrency(value, currencyCode);
 
             return ScrollShadowWrapper(
+              showScrollToTopButton: false,
               builder: (controller) => ListView(
                 controller: controller,
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
                 children: [
-                  _buildHeader(),
-                const SizedBox(height: 18),
-                _buildSectionSelector(),
-                const SizedBox(height: 18),
-                _buildTimeframeSelector(),
-                const SizedBox(height: 18),
-                ..._buildSectionContent(transactions, holdings, formatter),
-              ],
-            ),
-          );
-        },
+                  _buildSectionSelector(),
+                  const SizedBox(height: 18),
+                  _buildTimeframeSelector(),
+                  const SizedBox(height: 18),
+                  ..._buildSectionContent(transactions, holdings, formatter),
+                ],
+              ),
+            );
+          },
         );
       },
-    );
-  }
-
-  Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF151F3B),
-            Color(0xFF1D336A),
-            Color(0xFF112143),
-          ],
-        ),
-      ),
-      child: const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Finance Intelligence',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Compare expenses, investments, and in-hand balance with gradient-powered charts and date-range analytics.',
-            style: TextStyle(
-              color: Colors.white70,
-              height: 1.4,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1103,18 +1110,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           total: totalTracked,
           emptyMessage: 'No data available for this timeframe.',
           centerTitle: 'Balance\nmix',
-          centerSubtitle: formatter(totalTracked),
-          detailFormatter: formatter,
-        ),
-        const SizedBox(height: 28),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            _MetricChip(label: 'Income', value: formatter(summary.income)),
-            _MetricChip(label: 'Tracked Total', value: formatter(summary.totalTracked)),
-            _MetricChip(label: 'Range', value: range.label),
-          ],
+          valueFormatter: formatter,
         ),
       ],
     );
@@ -1149,8 +1145,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     total: totalExpenses,
                     emptyMessage: 'No expense data available in this timeframe.',
                     centerTitle: 'Expense\nanalysis',
-                    centerSubtitle: formatter(totalExpenses),
-                    detailFormatter: formatter,
+                    valueFormatter: formatter,
                   ),
                 ] else ...[
                   _buildChildCategoryAnalysis(rangeTransactions, selectedCategory, formatter),
@@ -1568,7 +1563,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     return List.generate(entries.length, (index) {
       final entry = entries[index];
-      final gradient = _chartGradientForKey(entry.key);
+      final gradient = _semanticGradientForKey(entry.key);
       return _CategoryChartItem(
         label: entry.key,
         amount: entry.value,
@@ -1617,7 +1612,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     return List.generate(entries.length, (index) {
       final entry = entries[index];
-      final gradient = _chartGradientForKey('$parentCategory:${entry.key}');
+      final gradient = _semanticGradientForKey('$parentCategory:${entry.key}');
       return _CategoryChartItem(
         label: entry.key,
         amount: entry.value,
@@ -1691,8 +1686,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           total: total,
           emptyMessage: 'No child categories found for this parent category.',
           centerTitle: '$parentCategory\nbreakdown',
-          centerSubtitle: formatter(total),
-          detailFormatter: formatter,
+          valueFormatter: formatter,
         ),
       ],
     );
@@ -1895,21 +1889,21 @@ class _BalanceSummary {
         label: 'Expenses',
         shortLabel: 'Expense',
         amount: expense < 0 ? 0 : expense,
-        gradient: _chartGradientForKey('balance:expenses'),
+        gradient: _semanticGradientForKey('balance:expenses'),
         color: _chartColorForKey('balance:expenses'),
       ),
       _CategoryChartItem(
         label: 'Investments',
         shortLabel: 'Invest',
         amount: investment < 0 ? 0 : investment,
-        gradient: _chartGradientForKey('balance:investments'),
+        gradient: _semanticGradientForKey('balance:investments'),
         color: _chartColorForKey('balance:investments'),
       ),
       _CategoryChartItem(
         label: 'In Hand',
         shortLabel: 'In Hand',
         amount: inHand < 0 ? 0 : inHand,
-        gradient: _chartGradientForKey('balance:in-hand'),
+        gradient: _semanticGradientForKey('balance:in-hand'),
         color: _chartColorForKey('balance:in-hand'),
       ),
     ];
@@ -2009,30 +2003,61 @@ class _ReportCard extends StatelessWidget {
   }
 }
 
-class _DonutShowcase extends StatelessWidget {
+class _DonutShowcase extends StatefulWidget {
   const _DonutShowcase({
     required this.items,
     required this.total,
     required this.emptyMessage,
     required this.centerTitle,
-    required this.centerSubtitle,
-    required this.detailFormatter,
+    required this.valueFormatter,
   });
 
   final List<_CategoryChartItem> items;
   final double total;
   final String emptyMessage;
   final String centerTitle;
-  final String centerSubtitle;
-  final String Function(double) detailFormatter;
+  final String Function(double) valueFormatter;
+
+  @override
+  State<_DonutShowcase> createState() => _DonutShowcaseState();
+}
+
+class _DonutShowcaseState extends State<_DonutShowcase> {
+  int? _selectedIndex;
+
+  @override
+  void didUpdateWidget(covariant _DonutShowcase oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldSignature = oldWidget.items
+        .where((item) => item.amount > 0)
+        .map((item) => '${item.label}:${item.amount.toStringAsFixed(2)}')
+        .join('|');
+    final newSignature = widget.items
+        .where((item) => item.amount > 0)
+        .map((item) => '${item.label}:${item.amount.toStringAsFixed(2)}')
+        .join('|');
+    if (oldSignature != newSignature) {
+      _selectedIndex = null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (total <= 0 || items.every((item) => item.amount <= 0)) {
-      return _EmptyChart(message: emptyMessage);
+    if (widget.total <= 0 || widget.items.every((item) => item.amount <= 0)) {
+      return _EmptyChart(message: widget.emptyMessage);
     }
 
-    final activeItems = items.where((item) => item.amount > 0).toList();
+    final activeItems = widget.items.where((item) => item.amount > 0).toList();
+    final safeSelectedIndex = _selectedIndex != null && _selectedIndex! < activeItems.length ? _selectedIndex : null;
+    final selectedItem = safeSelectedIndex == null ? null : activeItems[safeSelectedIndex!];
+    final selectedPercentage = selectedItem == null || widget.total == 0
+        ? 0.0
+        : (selectedItem.amount / widget.total) * 100;
+    final animationKey = [
+      widget.centerTitle,
+      widget.total.toStringAsFixed(2),
+      ...activeItems.map((item) => '${item.label}:${item.amount.toStringAsFixed(2)}'),
+    ].join('|');
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -2040,70 +2065,227 @@ class _DonutShowcase extends StatelessWidget {
         final centerSpaceRadius = chartSize * 0.30;
         final sectionRadius = chartSize * 0.19;
 
-        return Column(
-          children: [
-            Center(
-              child: SizedBox(
-                height: chartSize,
-                width: chartSize,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    _AnalyticsDonutChart(
-                      items: activeItems,
-                      total: total,
-                      size: chartSize,
-                      centerSpaceRadius: centerSpaceRadius,
-                      sectionRadius: sectionRadius,
-                    ),
-                    Container(
-                      width: centerSpaceRadius * 1.62,
-                      height: centerSpaceRadius * 1.62,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color(0xFF0A1020).withValues(alpha: 0.98),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        return TapRegion(
+          onTapOutside: (_) {
+            if (_selectedIndex != null) {
+              setState(() {
+                _selectedIndex = null;
+              });
+            }
+          },
+          child: TweenAnimationBuilder<double>(
+            key: ValueKey(animationKey),
+            tween: Tween(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 2200),
+            curve: Curves.easeInOutCubic,
+            builder: (context, progress, child) {
+              final clampedProgress = progress.clamp(0.0, 1.0).toDouble();
+              final valueProgress = Curves.easeOutCubic.transform(clampedProgress);
+
+              return Column(
+                children: [
+                  Opacity(
+                    opacity: 0.35 + (valueProgress * 0.65),
+                    child: Transform.translate(
+                      offset: Offset(0, 12 * (1 - valueProgress)),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0E1528),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                        ),
+                        child: Text(
+                          widget.valueFormatter(widget.total * valueProgress),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'Inter',
+                          ),
+                        ),
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 18),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Center(
+                    child: SizedBox(
+                      height: chartSize,
+                      width: chartSize,
+                      child: Stack(
+                        alignment: Alignment.center,
                         children: [
-                          Text(
-                            centerTitle,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              height: 1.35,
-                              fontWeight: FontWeight.w500,
-                              fontFamily: 'Outfit',
+                          Opacity(
+                            opacity: 0.2 + (progress * 0.8),
+                            child: Container(
+                              width: chartSize * 0.84,
+                              height: chartSize * 0.84,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.05),
+                                  width: 18,
+                                ),
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 10),
-                          Text(
-                            centerSubtitle,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.7),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              fontFamily: 'Inter',
+                          _AnalyticsDonutChart(
+                            items: activeItems,
+                            total: widget.total,
+                            size: chartSize,
+                            centerSpaceRadius: centerSpaceRadius,
+                            sectionRadius: sectionRadius,
+                            progress: progress,
+                            selectedIndex: safeSelectedIndex,
+                            onSliceTap: (index) {
+                              setState(() {
+                                _selectedIndex = _selectedIndex == index ? null : index;
+                              });
+                            },
+                          ),
+                          Opacity(
+                            opacity: progress < 0.55 ? 0 : ((progress - 0.55) / 0.45).clamp(0.0, 1.0).toDouble(),
+                            child: Transform.scale(
+                              scale: 0.96 + (0.04 * Curves.easeOutCubic.transform(clampedProgress)),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 240),
+                                curve: Curves.easeOutCubic,
+                                width: centerSpaceRadius * 1.62,
+                                height: centerSpaceRadius * 1.62,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: const Color(0xFF0A1020).withValues(alpha: 0.98),
+                                  border: Border.all(
+                                    color: selectedItem == null
+                                        ? Colors.white.withValues(alpha: 0.08)
+                                        : selectedItem.color.withValues(alpha: 0.55),
+                                  ),
+                                  boxShadow: selectedItem == null
+                                      ? null
+                                      : [
+                                          BoxShadow(
+                                            color: selectedItem.color.withValues(alpha: 0.18),
+                                            blurRadius: 28,
+                                            spreadRadius: 3,
+                                          ),
+                                        ],
+                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 18),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      selectedItem?.label ?? widget.centerTitle,
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: selectedItem == null ? 16 : 14,
+                                        height: 1.35,
+                                        fontWeight: FontWeight.w500,
+                                        fontFamily: 'Outfit',
+                                      ),
+                                    ),
+                                    if (selectedItem != null) ...[
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        widget.valueFormatter(selectedItem.amount),
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w800,
+                                          fontFamily: 'Inter',
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '${selectedPercentage.toStringAsFixed(1)}%',
+                                        style: TextStyle(
+                                          color: Colors.white.withValues(alpha: 0.7),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          fontFamily: 'Inter',
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
+                          if (selectedItem != null)
+                            Positioned(
+                              top: chartSize * 0.06,
+                              child: AnimatedOpacity(
+                                duration: const Duration(milliseconds: 220),
+                                curve: Curves.easeOutCubic,
+                                opacity: progress < 0.72 ? 0 : 1,
+                                child: AnimatedSlide(
+                                  duration: const Duration(milliseconds: 240),
+                                  curve: Curves.easeOutCubic,
+                                  offset: progress < 0.72 ? const Offset(0, 0.15) : Offset.zero,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF13203A),
+                                      borderRadius: BorderRadius.circular(999),
+                                      border: Border.all(color: selectedItem.color.withValues(alpha: 0.55)),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: selectedItem.color.withValues(alpha: 0.22),
+                                          blurRadius: 18,
+                                          spreadRadius: 2,
+                                        ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          width: 8,
+                                          height: 8,
+                                          decoration: BoxDecoration(
+                                            color: selectedItem.color,
+                                            borderRadius: BorderRadius.circular(999),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          '${selectedItem.label} • ${widget.valueFormatter(selectedItem.amount)}',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            fontFamily: 'Inter',
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            _AnalyticsLegend(
-              items: activeItems,
-              total: total,
-              detailFormatter: detailFormatter,
-            ),
-          ],
+                  ),
+                  const SizedBox(height: 18),
+                  _AnalyticsLegend(
+                    items: activeItems,
+                    total: widget.total,
+                    progress: progress,
+                    selectedIndex: safeSelectedIndex,
+                    valueFormatter: widget.valueFormatter,
+                    onItemTap: (index) {
+                      setState(() {
+                        _selectedIndex = _selectedIndex == index ? null : index;
+                      });
+                    },
+                  ),
+                ],
+              );
+            },
+          ),
         );
       },
     );
@@ -2112,11 +2294,15 @@ class _DonutShowcase extends StatelessWidget {
 
 class _AnalyticsDonutChart extends StatelessWidget {
   const _AnalyticsDonutChart({
+    super.key,
     required this.items,
     required this.total,
     required this.size,
     required this.centerSpaceRadius,
     required this.sectionRadius,
+    required this.progress,
+    required this.selectedIndex,
+    required this.onSliceTap,
   });
 
   final List<_CategoryChartItem> items;
@@ -2124,43 +2310,87 @@ class _AnalyticsDonutChart extends StatelessWidget {
   final double size;
   final double centerSpaceRadius;
   final double sectionRadius;
+  final double progress;
+  final int? selectedIndex;
+  final ValueChanged<int> onSliceTap;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: PieChart(
-        swapAnimationDuration: const Duration(milliseconds: 900),
-        swapAnimationCurve: Curves.easeOutCubic,
-        PieChartData(
-          startDegreeOffset: -90,
-          sectionsSpace: 0,
-          centerSpaceRadius: centerSpaceRadius,
-          borderData: FlBorderData(show: false),
-          pieTouchData: PieTouchData(enabled: false),
-          sections: items.map((item) {
-            final percentage = total == 0 ? 0.0 : (item.amount / total) * 100;
-            final showTitle = percentage >= 6;
+    final topItems = [...items]..sort((a, b) => b.amount.compareTo(a.amount));
+    final highlightedLabels = topItems.take(math.min(4, topItems.length)).map((item) => item.label).toSet();
+    final dominantLabel = topItems.isEmpty ? null : topItems.first.label;
 
-            return PieChartSectionData(
-              value: item.amount,
-              radius: sectionRadius,
-              title: showTitle ? '${percentage.toStringAsFixed(1)}%' : '',
-              titlePositionPercentageOffset: 0.78,
-              titleStyle: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'Inter',
+    final chartProgress = Curves.easeOutCubic.transform(progress.clamp(0.0, 1.0).toDouble());
+    final rotation = (-8 * math.pi / 180) * (1 - chartProgress);
+
+    return Opacity(
+      opacity: 0.45 + (chartProgress * 0.55),
+      child: Transform.scale(
+        scale: 0.92 + (chartProgress * 0.08),
+        child: Transform.rotate(
+          angle: rotation,
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: PieChart(
+              swapAnimationDuration: const Duration(milliseconds: 1700),
+              swapAnimationCurve: Curves.easeInOutCubic,
+              PieChartData(
+                startDegreeOffset: -90,
+                sectionsSpace: 0,
+                centerSpaceRadius: centerSpaceRadius,
+                borderData: FlBorderData(show: false),
+                pieTouchData: PieTouchData(
+                  enabled: true,
+                  touchCallback: (event, response) {
+                    if (!event.isInterestedForInteractions) {
+                      return;
+                    }
+                    final touchedIndex = response?.touchedSection?.touchedSectionIndex;
+                    if (touchedIndex != null && touchedIndex >= 0 && touchedIndex < items.length) {
+                      onSliceTap(touchedIndex);
+                    }
+                  },
+                ),
+                sections: items.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final item = entry.value;
+                  final percentage = total == 0 ? 0.0 : (item.amount / total) * 100;
+                  final isDominant = item.label == dominantLabel;
+                  final isSelected = selectedIndex == index;
+                  final itemProgress = isDominant
+                      ? Curves.easeOutBack.transform(chartProgress.clamp(0.0, 1.0).toDouble())
+                      : chartProgress;
+                  final showTitle =
+                      highlightedLabels.contains(item.label) && percentage >= 5 && progress > 0.84;
+
+                  return PieChartSectionData(
+                    value: math.max(item.amount * itemProgress, 0.001),
+                    radius: isSelected
+                        ? sectionRadius + 14
+                        : isDominant
+                            ? sectionRadius + 8
+                            : sectionRadius,
+                    title: showTitle ? '${percentage.toStringAsFixed(1)}%' : '',
+                    titlePositionPercentageOffset: isSelected ? 0.72 : isDominant ? 0.74 : 0.77,
+                    titleStyle: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'Inter',
+                    ),
+                    gradient: item.gradient,
+                    borderSide: BorderSide(
+                      color: isSelected
+                          ? item.color.withValues(alpha: 0.95)
+                          : Colors.white.withValues(alpha: 0.55 + (chartProgress * 0.45)),
+                      width: isSelected ? 2.2 : 1.2,
+                    ),
+                  );
+                }).toList(),
               ),
-              gradient: item.gradient,
-              borderSide: const BorderSide(
-                color: Colors.white,
-                width: 1.2,
-              ),
-            );
-          }).toList(),
+            ),
+          ),
         ),
       ),
     );
@@ -2171,26 +2401,38 @@ class _AnalyticsLegend extends StatelessWidget {
   const _AnalyticsLegend({
     required this.items,
     required this.total,
-    required this.detailFormatter,
+    required this.progress,
+    required this.selectedIndex,
+    required this.valueFormatter,
+    required this.onItemTap,
   });
 
   final List<_CategoryChartItem> items;
   final double total;
-  final String Function(double) detailFormatter;
+  final double progress;
+  final int? selectedIndex;
+  final String Function(double) valueFormatter;
+  final ValueChanged<int> onItemTap;
 
   @override
   Widget build(BuildContext context) {
     return Wrap(
       alignment: WrapAlignment.center,
-      spacing: 12,
-      runSpacing: 12,
-      children: items.map((item) {
+      spacing: 10,
+      runSpacing: 10,
+      children: items.asMap().entries.map((entry) {
+        final index = entry.key;
+        final item = entry.value;
         final percentage = total == 0 ? 0.0 : (item.amount / total) * 100;
         return _InlineLegendItem(
+          index: index,
+          progress: progress,
+          isSelected: selectedIndex == index,
           label: item.label,
           percentage: percentage,
-          amount: detailFormatter(item.amount),
+          amount: valueFormatter(item.amount),
           color: item.color,
+          onTap: () => onItemTap(index),
         );
       }).toList(),
     );
@@ -2199,65 +2441,94 @@ class _AnalyticsLegend extends StatelessWidget {
 
 class _InlineLegendItem extends StatelessWidget {
   const _InlineLegendItem({
+    required this.index,
+    required this.progress,
+    required this.isSelected,
     required this.label,
     required this.percentage,
     required this.amount,
     required this.color,
+    required this.onTap,
   });
 
+  final int index;
+  final double progress;
+  final bool isSelected;
   final String label;
   final double percentage;
   final String amount;
   final Color color;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0E1528),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 10,
-            height: 10,
+    final start = 0.58 + (index * 0.07);
+    final localProgress = ((progress - start) / 0.28).clamp(0.0, 1.0).toDouble();
+    final eased = Curves.easeOutCubic.transform(localProgress);
+
+    return Opacity(
+      opacity: eased,
+      child: Transform.translate(
+        offset: Offset(0, 10 * (1 - eased)),
+        child: GestureDetector(
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(3),
+              color: isSelected
+                  ? const Color(0xFF16213B)
+                  : const Color(0xFF0E1528).withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: isSelected
+                    ? color.withValues(alpha: 0.7)
+                    : Colors.white.withValues(alpha: 0.06),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 9,
+                  height: 9,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${percentage.toStringAsFixed(1)}%',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.72),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  amount,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.58),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            '${percentage.toStringAsFixed(1)}%',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.78),
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            amount,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.55),
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

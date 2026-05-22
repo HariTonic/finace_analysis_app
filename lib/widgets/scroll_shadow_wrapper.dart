@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 
 class ScrollShadowWrapper extends StatefulWidget {
   final Widget Function(ScrollController controller) builder;
+  final bool showScrollToTopButton;
+  final ScrollController? externalController;
 
   const ScrollShadowWrapper({
     super.key,
     required this.builder,
+    this.showScrollToTopButton = true,
+    this.externalController,
   });
 
   @override
@@ -14,6 +18,7 @@ class ScrollShadowWrapper extends StatefulWidget {
 
 class _ScrollShadowWrapperState extends State<ScrollShadowWrapper> {
   late final ScrollController _controller;
+  late final bool _ownsController;
   bool _showTopShadow = false;
   bool _showBottomShadow = false;
   bool _showScrollToTopButton = false;
@@ -21,7 +26,8 @@ class _ScrollShadowWrapperState extends State<ScrollShadowWrapper> {
   @override
   void initState() {
     super.initState();
-    _controller = ScrollController();
+    _ownsController = widget.externalController == null;
+    _controller = widget.externalController ?? ScrollController();
     _controller.addListener(_updateScrollState);
     WidgetsBinding.instance.addPostFrameCallback((_) => _updateScrollState());
   }
@@ -35,7 +41,7 @@ class _ScrollShadowWrapperState extends State<ScrollShadowWrapper> {
     final maxScroll = _controller.position.maxScrollExtent;
     final canScrollUp = offset > 12;
     final canScrollDown = offset < maxScroll - 12;
-    final showButton = offset > 260;
+    final showButton = widget.showScrollToTopButton && offset > 260;
 
     if (canScrollUp != _showTopShadow ||
         canScrollDown != _showBottomShadow ||
@@ -51,7 +57,9 @@ class _ScrollShadowWrapperState extends State<ScrollShadowWrapper> {
   @override
   void dispose() {
     _controller.removeListener(_updateScrollState);
-    _controller.dispose();
+    if (_ownsController) {
+      _controller.dispose();
+    }
     super.dispose();
   }
 

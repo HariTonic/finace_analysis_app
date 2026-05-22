@@ -246,6 +246,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   final hasMoreRecords = (_currentBatchIndex + 1) * _recordsPerBatch < _allFilteredTransactions.length;
 
                   return ScrollShadowWrapper(
+                    externalController: _scrollController,
                     builder: (controller) => Container(
                       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                       decoration: BoxDecoration(
@@ -253,11 +254,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Scrollbar(
-                        controller: _scrollController,
+                        controller: controller,
                         thickness: 4,
                         radius: const Radius.circular(2),
                         child: ListView.separated(
-                          controller: _scrollController,
+                          controller: controller,
                           shrinkWrap: false,
                           itemCount: _displayedTransactions.length + (hasMoreRecords && _isLoadingMore ? 1 : 0),
                           separatorBuilder: (context, index) => const Divider(
