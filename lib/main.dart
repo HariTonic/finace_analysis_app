@@ -3,6 +3,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'utils/app_settings.dart';
 import 'utils/notification_service.dart';
 import 'utils/import_history.dart';
+import 'utils/data_seeder.dart';
 import 'models/transaction.dart';
 import 'models/investment_holding.dart';
 import 'screens/splash_screen.dart';
@@ -26,6 +27,10 @@ void main() async {
   await Hive.openBox('settings');
   await ImportHistoryManager.initialize();
   AppSettings.getInstallDate();
+  
+  // Seed sample data if database is empty
+  await DataSeeder.seedSampleDataIfEmpty();
+  
   try {
     await NotificationService.initialize();
     await NotificationService.scheduleDailyNotifications();

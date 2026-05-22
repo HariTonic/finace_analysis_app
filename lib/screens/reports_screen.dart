@@ -15,49 +15,59 @@ import '../utils/gold_price_service.dart';
 import '../widgets/scroll_shadow_wrapper.dart';
 
 const List<Color> _chartPalette = [
-  Color(0xFF7B61FF),
-  Color(0xFF00D1FF),
-  Color(0xFFFF4D8D),
-  Color(0xFFFFB84D),
-  Color(0xFFFF0080),
-  Color(0xFF7928CA),
-  Color(0xFF00F5FF),
-  Color(0xFFFCEE09),
-  Color(0xFF005AA7),
-  Color(0xFF00C6FF),
-  Color(0xFF7FDBFF),
-  Color(0xFFB2FEFA),
-  Color(0xFFFF512F),
-  Color(0xFFF09819),
-  Color(0xFFFF9966),
-  Color(0xFFFFD194),
-  Color(0xFF00C853),
-  Color(0xFF69F0AE),
-  Color(0xFF1DE9B6),
-  Color(0xFF00BFA5),
-  Color(0xFFB388FF),
-  Color(0xFF7C4DFF),
-  Color(0xFFE1BEE7),
-  Color(0xFFCE93D8),
-  Color(0xFFFF9A9E),
-  Color(0xFFFAD0C4),
-  Color(0xFFFFD3B6),
-  Color(0xFFFFAAA5),
-  Color(0xFF1F1C2C),
-  Color(0xFF928DAB),
+  Color(0xFF6C5CE7),
+  Color(0xFF00B8D9),
+  Color(0xFF10B981),
+  Color(0xFFF59E0B),
+  Color(0xFFEF4444),
+  Color(0xFF8B5CF6),
+  Color(0xFFEC4899),
+  Color(0xFF14B8A6),
+  Color(0xFF3B82F6),
+  Color(0xFF84CC16),
+  Color(0xFFF97316),
+  Color(0xFF6366F1),
 ];
 
 LinearGradient _chartGradientAt(int index) {
   final start = _chartPalette[index % _chartPalette.length];
-  final end = _chartPalette[(index + 1) % _chartPalette.length];
   return LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [start, end],
+    colors: [
+      _lighten(start, 0.18),
+      start,
+      _darken(start, 0.10),
+    ],
+    stops: const [0.0, 0.58, 1.0],
   );
 }
 
 Color _chartColorAt(int index) => _chartPalette[index % _chartPalette.length];
+
+int _paletteIndexForKey(String key) {
+  var hash = 0;
+  for (final codeUnit in key.toLowerCase().codeUnits) {
+    hash = ((hash * 31) + codeUnit) & 0x7fffffff;
+  }
+  return hash % _chartPalette.length;
+}
+
+LinearGradient _chartGradientForKey(String key) => _chartGradientAt(_paletteIndexForKey(key));
+
+Color _chartColorForKey(String key) => _chartColorAt(_paletteIndexForKey(key));
+
+Color _lighten(Color color, double amount) {
+  final hsl = HSLColor.fromColor(color);
+  final lightness = (hsl.lightness + amount).clamp(0.0, 1.0);
+  return hsl.withLightness(lightness).toColor();
+}
+
+Color _darken(Color color, double amount) {
+  final hsl = HSLColor.fromColor(color);
+  final lightness = (hsl.lightness - amount).clamp(0.0, 1.0);
+  return hsl.withLightness(lightness).toColor();
+}
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -1088,94 +1098,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        const SizedBox(height: 18),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final stacked = constraints.maxWidth < 860;
-            final expenseBreakdown = _buildExpenseBreakdown(rangeTransactions);
-            final totalExpenses = expenseBreakdown.fold<double>(0, (sum, item) => sum + item.amount);
-
-            final chartWidget = SizedBox(
-              height: 416,
-              child: totalExpenses <= 0
-                  ? const _EmptyChart(message: 'No expense data available for this timeframe.')
-                  : Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          _RoundedPieChart(
-                            items: expenseBreakdown,
-                            total: totalExpenses,
-                            size: 416,
-                            innerRadius: 129,
-                            thicknessScale: 1.05,
-                          ),
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                AppSettings.formatCurrency(totalExpenses, AppSettings.getCurrency()),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w800,
-                                  fontFamily: 'Inter',
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Total Spending',
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.6),
-                                  fontSize: 12,
-                                  fontFamily: 'Inter',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-            );
-
-            final legendWidget = Column(
-              children: chartItems.map((item) {
-                final percentage = totalTracked == 0 ? 0.0 : (item.amount / totalTracked) * 100;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _LegendTile(
-                    label: item.label,
-                    amount: formatter(item.amount),
-                    percentage: '${percentage.toStringAsFixed(1)}%',
-                    colors: item.gradient.colors,
-                  ),
-                );
-              }).toList(),
-            );
-
-            if (stacked) {
-              return Column(
-                children: [
-                  chartWidget,
-                  const SizedBox(height: 24),
-                  legendWidget,
-                ],
-              );
-            }
-
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: constraints.maxWidth * 0.5,
-                  child: Center(child: chartWidget),
-                ),
-                const SizedBox(width: 18),
-                Expanded(child: legendWidget),
-              ],
-            );
-          },
+        _DonutShowcase(
+          items: chartItems,
+          total: totalTracked,
+          emptyMessage: 'No data available for this timeframe.',
+          centerTitle: 'Balance\nmix',
+          centerSubtitle: formatter(totalTracked),
+          detailFormatter: formatter,
         ),
         const SizedBox(height: 28),
         Wrap(
@@ -1215,52 +1144,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 _buildExpenseCategoryFilter(parentCategories),
                 const SizedBox(height: 26),
                 if (selectedCategory == null) ...[
-                  SizedBox(
-                    height: 416, // increased by ~30%
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        _RoundedPieChart(
-                          items: expenseBreakdown,
-                          total: totalExpenses,
-                          size: 416,
-                          innerRadius: 129,
-                          thicknessScale: 1.05,
-                        ),
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text(
-                              'Total Spending',
-                              style: TextStyle(color: Colors.white70, fontSize: 12),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              formatter(totalExpenses),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 24,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                  _DonutShowcase(
+                    items: expenseBreakdown,
+                    total: totalExpenses,
+                    emptyMessage: 'No expense data available in this timeframe.',
+                    centerTitle: 'Expense\nanalysis',
+                    centerSubtitle: formatter(totalExpenses),
+                    detailFormatter: formatter,
                   ),
-                  const SizedBox(height: 18),
-                  ...expenseBreakdown.map((item) {
-                    final percentage = totalExpenses == 0 ? 0.0 : (item.amount / totalExpenses) * 100;
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _LegendTile(
-                        label: item.label,
-                        amount: formatter(item.amount),
-                        percentage: '${percentage.toStringAsFixed(1)}%',
-                        colors: item.gradient.colors,
-                      ),
-                    );
-                  }),
                 ] else ...[
                   _buildChildCategoryAnalysis(rangeTransactions, selectedCategory, formatter),
                 ],
@@ -1674,16 +1565,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     final entries = totals.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    final gradients = List.generate(entries.length, (index) => _chartGradientAt(index));
 
     return List.generate(entries.length, (index) {
       final entry = entries[index];
-      final gradient = gradients[index % gradients.length];
+      final gradient = _chartGradientForKey(entry.key);
       return _CategoryChartItem(
         label: entry.key,
         amount: entry.value,
         gradient: gradient,
-        color: gradient.colors.first,
+        color: _chartColorForKey(entry.key),
       );
     });
   }
@@ -1724,16 +1614,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     final entries = totals.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    final gradients = List.generate(entries.length, (index) => _chartGradientAt(index));
 
     return List.generate(entries.length, (index) {
       final entry = entries[index];
-      final gradient = gradients[index % gradients.length];
+      final gradient = _chartGradientForKey('$parentCategory:${entry.key}');
       return _CategoryChartItem(
         label: entry.key,
         amount: entry.value,
         gradient: gradient,
-        color: gradient.colors.first,
+        color: _chartColorForKey('$parentCategory:${entry.key}'),
       );
     });
   }
@@ -1797,57 +1686,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
         ),
         const SizedBox(height: 14),
-        SizedBox(
-          height: 416,
-          child: childBreakdown.isEmpty
-              ? const _EmptyChart(message: 'No child categories found for this parent category.')
-              : Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      _RoundedPieChart(
-                        items: childBreakdown,
-                        total: total,
-                        size: 416,
-                        innerRadius: 112,
-                        thicknessScale: 1.05,
-                      ),
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text(
-                            'Total',
-                            style: TextStyle(color: Colors.white70, fontSize: 12),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            formatter(total),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+        _DonutShowcase(
+          items: childBreakdown,
+          total: total,
+          emptyMessage: 'No child categories found for this parent category.',
+          centerTitle: '$parentCategory\nbreakdown',
+          centerSubtitle: formatter(total),
+          detailFormatter: formatter,
         ),
-        const SizedBox(height: 18),
-        ...childBreakdown.map((item) {
-          final percentage = total == 0 ? 0.0 : (item.amount / total) * 100;
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: _LegendTile(
-              label: item.label,
-              amount: formatter(item.amount),
-              percentage: '${percentage.toStringAsFixed(1)}%',
-              colors: item.gradient.colors,
-            ),
-          );
-        }),
       ],
     );
   }
@@ -2049,22 +1895,22 @@ class _BalanceSummary {
         label: 'Expenses',
         shortLabel: 'Expense',
         amount: expense < 0 ? 0 : expense,
-        gradient: _chartGradientAt(0),
-        color: _chartColorAt(0),
+        gradient: _chartGradientForKey('balance:expenses'),
+        color: _chartColorForKey('balance:expenses'),
       ),
       _CategoryChartItem(
         label: 'Investments',
         shortLabel: 'Invest',
         amount: investment < 0 ? 0 : investment,
-        gradient: _chartGradientAt(2),
-        color: _chartColorAt(2),
+        gradient: _chartGradientForKey('balance:investments'),
+        color: _chartColorForKey('balance:investments'),
       ),
       _CategoryChartItem(
         label: 'In Hand',
         shortLabel: 'In Hand',
         amount: inHand < 0 ? 0 : inHand,
-        gradient: _chartGradientAt(4),
-        color: _chartColorAt(4),
+        gradient: _chartGradientForKey('balance:in-hand'),
+        color: _chartColorForKey('balance:in-hand'),
       ),
     ];
   }
@@ -2163,84 +2009,255 @@ class _ReportCard extends StatelessWidget {
   }
 }
 
-class _LegendTile extends StatelessWidget {
-  const _LegendTile({
-    required this.label,
-    required this.amount,
-    required this.percentage,
-    required this.colors,
+class _DonutShowcase extends StatelessWidget {
+  const _DonutShowcase({
+    required this.items,
+    required this.total,
+    required this.emptyMessage,
+    required this.centerTitle,
+    required this.centerSubtitle,
+    required this.detailFormatter,
   });
 
-  final String label;
-  final String amount;
-  final String percentage;
-  final List<Color> colors;
+  final List<_CategoryChartItem> items;
+  final double total;
+  final String emptyMessage;
+  final String centerTitle;
+  final String centerSubtitle;
+  final String Function(double) detailFormatter;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0E1528),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 14,
-            height: 48,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              gradient: LinearGradient(colors: colors),
+    if (total <= 0 || items.every((item) => item.amount <= 0)) {
+      return _EmptyChart(message: emptyMessage);
+    }
+
+    final activeItems = items.where((item) => item.amount > 0).toList();
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final chartSize = constraints.maxWidth < 600 ? 300.0 : 420.0;
+        final centerSpaceRadius = chartSize * 0.30;
+        final sectionRadius = chartSize * 0.19;
+
+        return Column(
+          children: [
+            Center(
+              child: SizedBox(
+                height: chartSize,
+                width: chartSize,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    _AnalyticsDonutChart(
+                      items: activeItems,
+                      total: total,
+                      size: chartSize,
+                      centerSpaceRadius: centerSpaceRadius,
+                      sectionRadius: sectionRadius,
+                    ),
+                    Container(
+                      width: centerSpaceRadius * 1.62,
+                      height: centerSpaceRadius * 1.62,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xFF0A1020).withValues(alpha: 0.98),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 18),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            centerTitle,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              height: 1.35,
+                              fontWeight: FontWeight.w500,
+                              fontFamily: 'Outfit',
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            centerSubtitle,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.7),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'Inter',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 4),
-                Text(amount, style: const TextStyle(color: Colors.white70)),
-              ],
+            const SizedBox(height: 18),
+            _AnalyticsLegend(
+              items: activeItems,
+              total: total,
+              detailFormatter: detailFormatter,
             ),
-          ),
-          Text(
-            percentage,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _AnalyticsDonutChart extends StatelessWidget {
+  const _AnalyticsDonutChart({
+    required this.items,
+    required this.total,
+    required this.size,
+    required this.centerSpaceRadius,
+    required this.sectionRadius,
+  });
+
+  final List<_CategoryChartItem> items;
+  final double total;
+  final double size;
+  final double centerSpaceRadius;
+  final double sectionRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: PieChart(
+        swapAnimationDuration: const Duration(milliseconds: 900),
+        swapAnimationCurve: Curves.easeOutCubic,
+        PieChartData(
+          startDegreeOffset: -90,
+          sectionsSpace: 0,
+          centerSpaceRadius: centerSpaceRadius,
+          borderData: FlBorderData(show: false),
+          pieTouchData: PieTouchData(enabled: false),
+          sections: items.map((item) {
+            final percentage = total == 0 ? 0.0 : (item.amount / total) * 100;
+            final showTitle = percentage >= 6;
+
+            return PieChartSectionData(
+              value: item.amount,
+              radius: sectionRadius,
+              title: showTitle ? '${percentage.toStringAsFixed(1)}%' : '',
+              titlePositionPercentageOffset: 0.78,
+              titleStyle: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'Inter',
+              ),
+              gradient: item.gradient,
+              borderSide: const BorderSide(
+                color: Colors.white,
+                width: 1.2,
+              ),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
 }
 
-class _PieChartBadge extends StatelessWidget {
-  const _PieChartBadge({
-    required this.percentage,
+class _AnalyticsLegend extends StatelessWidget {
+  const _AnalyticsLegend({
+    required this.items,
+    required this.total,
+    required this.detailFormatter,
   });
 
+  final List<_CategoryChartItem> items;
+  final double total;
+  final String Function(double) detailFormatter;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 12,
+      runSpacing: 12,
+      children: items.map((item) {
+        final percentage = total == 0 ? 0.0 : (item.amount / total) * 100;
+        return _InlineLegendItem(
+          label: item.label,
+          percentage: percentage,
+          amount: detailFormatter(item.amount),
+          color: item.color,
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _InlineLegendItem extends StatelessWidget {
+  const _InlineLegendItem({
+    required this.label,
+    required this.percentage,
+    required this.amount,
+    required this.color,
+  });
+
+  final String label;
   final double percentage;
+  final String amount;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF08101F),
+        color: const Color(0xFF0E1528),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
-      child: Text(
-        '${percentage.toStringAsFixed(1)}%',
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '${percentage.toStringAsFixed(1)}%',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.78),
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            amount,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.55),
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2583,92 +2600,3 @@ class _TrendLegend extends StatelessWidget {
   }
 }
 
-class _RoundedPieChart extends StatelessWidget {
-  const _RoundedPieChart({
-    required this.items,
-    required this.total,
-    required this.size,
-    required this.innerRadius,
-    this.thicknessScale = 1.0,
-  });
-
-  final List<_CategoryChartItem> items;
-  final double total;
-  final double size;
-  final double innerRadius;
-  final double thicknessScale;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: CustomPaint(
-        painter: _RoundedPiePainter(items: items, total: total, innerRadius: innerRadius, thicknessScale: thicknessScale),
-      ),
-    );
-  }
-}
-
-class _RoundedPiePainter extends CustomPainter {
-  _RoundedPiePainter({required this.items, required this.total, required this.innerRadius, required this.thicknessScale});
-
-  final List<_CategoryChartItem> items;
-  final double total;
-  final double innerRadius;
-  final double thicknessScale;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (total <= 0) return;
-
-    final center = Offset(size.width / 2, size.height / 2);
-    final outerRadius = math.min(size.width, size.height) / 2;
-    final baseThickness = outerRadius - innerRadius;
-    final thickness = baseThickness * thicknessScale;
-    var startAngle = -math.pi / 2;
-
-    for (final item in items) {
-      final sweep = (item.amount / total) * (math.pi * 2);
-
-      // create a per-slice sweep gradient using the item's gradient colors if available
-      final shaderColors = item.gradient.colors;
-      final rect = Rect.fromCircle(center: center, radius: (innerRadius + outerRadius) / 2);
-      final sweepGradient = SweepGradient(
-        startAngle: startAngle,
-        endAngle: startAngle + sweep,
-        colors: shaderColors.isNotEmpty ? shaderColors : [item.color, item.color],
-        transform: GradientRotation(0),
-      );
-
-      final paint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = thickness
-        ..strokeCap = StrokeCap.round
-        ..shader = sweepGradient.createShader(rect);
-
-      canvas.drawArc(rect, startAngle, sweep, false, paint);
-
-      // draw percentage label at arc midpoint (skip for very small slices)
-      final percentage = total == 0 ? 0.0 : (item.amount / total) * 100;
-      if (percentage >= 3.0 && sweep > 0.1) {
-        final mid = startAngle + sweep / 2;
-        final labelRadius = innerRadius + thickness * 0.66; // slightly more outward
-        final labelOffset = Offset(center.dx + math.cos(mid) * labelRadius, center.dy + math.sin(mid) * labelRadius);
-        final text = '${percentage.toStringAsFixed(1)}%';
-        final tp = TextPainter(
-          text: TextSpan(text: text, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
-          textDirection: ui.TextDirection.ltr,
-        );
-        tp.layout();
-        final textPos = labelOffset - Offset(tp.width / 2, tp.height / 2);
-        tp.paint(canvas, textPos);
-      }
-
-      startAngle += sweep;
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
-}

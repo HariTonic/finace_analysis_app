@@ -221,7 +221,12 @@ class _SmsExtractionScreenState extends State<SmsExtractionScreen> {
           : ScrollShadowWrapper(
               builder: (controller) => SingleChildScrollView(
                 controller: controller,
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  16,
+                  16,
+                  16 + MediaQuery.of(context).padding.bottom,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
