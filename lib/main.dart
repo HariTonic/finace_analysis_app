@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'utils/app_settings.dart';
@@ -28,8 +29,10 @@ void main() async {
   await ImportHistoryManager.initialize();
   AppSettings.getInstallDate();
   
-  // Seed sample data if database is empty
-  await DataSeeder.seedSampleDataIfEmpty();
+  if (kDebugMode) {
+    // Seed test data only in debug builds.
+    await DataSeeder.seedSampleDataIfEmpty();
+  }
   
   try {
     await NotificationService.initialize();

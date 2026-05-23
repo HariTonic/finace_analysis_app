@@ -15,35 +15,59 @@ import '../utils/gold_price_service.dart';
 import '../widgets/scroll_shadow_wrapper.dart';
 
 const List<Color> _chartPalette = [
-  Color(0xFF6C5CE7),
-  Color(0xFF00B8D9),
-  Color(0xFF10B981),
-  Color(0xFFF59E0B),
-  Color(0xFFEF4444),
-  Color(0xFF8B5CF6),
-  Color(0xFFEC4899),
-  Color(0xFF14B8A6),
-  Color(0xFF3B82F6),
-  Color(0xFF84CC16),
-  Color(0xFFF97316),
-  Color(0xFF6366F1),
+  Color(0xFF4F46E5), // Royal Blue
+  Color(0xFF0F766E), // Deep Teal
+  Color(0xFF059669), // Emerald
+  Color(0xFFD97706), // Burnished Amber
+  Color(0xFFDC2626), // Crimson
+  Color(0xFF7C3AED), // Amethyst
+  Color(0xFFDB2777), // Rose
+  Color(0xFF2563EB), // Sapphire
+  Color(0xFF65A30D), // Moss
+  Color(0xFFEA580C), // Copper
+  Color(0xFF0891B2), // Lagoon
+  Color(0xFF9333EA), // Orchid
+  Color(0xFFBE123C), // Wine
+  Color(0xFFCA8A04), // Gold
+  Color(0xFF0D9488), // Sea Green
+  Color(0xFF4338CA), // Indigo
 ];
+
+const Color _chartDividerColor = Color(0xFF10182E);
 
 LinearGradient _chartGradientAt(int index) {
   final start = _chartPalette[index % _chartPalette.length];
+  return _gradientFromColor(start);
+}
+
+LinearGradient _gradientFromColor(Color color) {
   return LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      _lighten(start, 0.18),
-      start,
-      _darken(start, 0.10),
+      _lighten(color, 0.18),
+      color,
+      _darken(color, 0.10),
     ],
     stops: const [0.0, 0.58, 1.0],
   );
 }
 
 Color _chartColorAt(int index) => _chartPalette[index % _chartPalette.length];
+
+int _rotationOffsetForKey(String key) {
+  var hash = 0;
+  for (final codeUnit in key.toLowerCase().codeUnits) {
+    hash = ((hash * 37) + codeUnit) & 0x7fffffff;
+  }
+  return hash % _chartPalette.length;
+}
+
+Color _distinctChartColor(int index, {int offset = 0}) =>
+    _chartPalette[(index + offset) % _chartPalette.length];
+
+LinearGradient _distinctChartGradient(int index, {int offset = 0}) =>
+    _gradientFromColor(_distinctChartColor(index, offset: offset));
 
 const Map<String, Color> _semanticCategoryColors = {
   'balance:expenses': Color(0xFFEF4444),
@@ -187,8 +211,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 children: [
                   _buildSectionSelector(),
                   const SizedBox(height: 18),
-                  _buildTimeframeSelector(),
-                  const SizedBox(height: 18),
+                  if (_selectedSection != _ReportSection.investmentAnalysis) ...[
+                    _buildTimeframeSelector(),
+                    const SizedBox(height: 18),
+                  ],
                   ..._buildSectionContent(transactions, holdings, formatter),
                 ],
               ),
@@ -1563,12 +1589,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     return List.generate(entries.length, (index) {
       final entry = entries[index];
-      final gradient = _semanticGradientForKey(entry.key);
+      final color = _distinctChartColor(index);
       return _CategoryChartItem(
         label: entry.key,
         amount: entry.value,
-        gradient: gradient,
-        color: _chartColorForKey(entry.key),
+        gradient: _distinctChartGradient(index),
+        color: color,
       );
     });
   }
@@ -1609,15 +1635,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     final entries = totals.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
+    final offset = _rotationOffsetForKey(parentCategory);
 
     return List.generate(entries.length, (index) {
       final entry = entries[index];
-      final gradient = _semanticGradientForKey('$parentCategory:${entry.key}');
+      final color = _distinctChartColor(index, offset: offset);
       return _CategoryChartItem(
         label: entry.key,
         amount: entry.value,
-        gradient: gradient,
-        color: _chartColorForKey('$parentCategory:${entry.key}'),
+        gradient: _distinctChartGradient(index, offset: offset),
+        color: color,
       );
     });
   }
@@ -2061,7 +2088,7 @@ class _DonutShowcaseState extends State<_DonutShowcase> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final chartSize = constraints.maxWidth < 600 ? 300.0 : 420.0;
+        final chartSize = constraints.maxWidth < 600 ? 328.0 : 440.0;
         final centerSpaceRadius = chartSize * 0.30;
         final sectionRadius = chartSize * 0.19;
 
@@ -2213,7 +2240,7 @@ class _DonutShowcaseState extends State<_DonutShowcase> {
                               ),
                             ),
                           ),
-                          if (selectedItem != null)
+                          if (false && selectedItem != null)
                             Positioned(
                               top: chartSize * 0.06,
                               child: AnimatedOpacity(
@@ -2321,76 +2348,150 @@ class _AnalyticsDonutChart extends StatelessWidget {
     final dominantLabel = topItems.isEmpty ? null : topItems.first.label;
 
     final chartProgress = Curves.easeOutCubic.transform(progress.clamp(0.0, 1.0).toDouble());
-    final rotation = (-8 * math.pi / 180) * (1 - chartProgress);
 
     return Opacity(
       opacity: 0.45 + (chartProgress * 0.55),
-      child: Transform.scale(
-        scale: 0.92 + (chartProgress * 0.08),
-        child: Transform.rotate(
-          angle: rotation,
-          child: SizedBox(
-            width: size,
-            height: size,
-            child: PieChart(
-              swapAnimationDuration: const Duration(milliseconds: 1700),
-              swapAnimationCurve: Curves.easeInOutCubic,
-              PieChartData(
-                startDegreeOffset: -90,
-                sectionsSpace: 0,
-                centerSpaceRadius: centerSpaceRadius,
-                borderData: FlBorderData(show: false),
-                pieTouchData: PieTouchData(
-                  enabled: true,
-                  touchCallback: (event, response) {
-                    if (!event.isInterestedForInteractions) {
-                      return;
-                    }
-                    final touchedIndex = response?.touchedSection?.touchedSectionIndex;
-                    if (touchedIndex != null && touchedIndex >= 0 && touchedIndex < items.length) {
-                      onSliceTap(touchedIndex);
-                    }
-                  },
-                ),
-                sections: items.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final item = entry.value;
-                  final percentage = total == 0 ? 0.0 : (item.amount / total) * 100;
-                  final isDominant = item.label == dominantLabel;
-                  final isSelected = selectedIndex == index;
-                  final itemProgress = isDominant
-                      ? Curves.easeOutBack.transform(chartProgress.clamp(0.0, 1.0).toDouble())
-                      : chartProgress;
-                  final showTitle =
-                      highlightedLabels.contains(item.label) && percentage >= 5 && progress > 0.84;
-
-                  return PieChartSectionData(
-                    value: math.max(item.amount * itemProgress, 0.001),
-                    radius: isSelected
-                        ? sectionRadius + 14
-                        : isDominant
-                            ? sectionRadius + 8
-                            : sectionRadius,
-                    title: showTitle ? '${percentage.toStringAsFixed(1)}%' : '',
-                    titlePositionPercentageOffset: isSelected ? 0.72 : isDominant ? 0.74 : 0.77,
-                    titleStyle: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      fontFamily: 'Inter',
-                    ),
-                    gradient: item.gradient,
-                    borderSide: BorderSide(
-                      color: isSelected
-                          ? item.color.withValues(alpha: 0.95)
-                          : Colors.white.withValues(alpha: 0.55 + (chartProgress * 0.45)),
-                      width: isSelected ? 2.2 : 1.2,
-                    ),
-                  );
-                }).toList(),
+      child: RepaintBoundary(
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: PieChart(
+            swapAnimationDuration: const Duration(milliseconds: 1700),
+            swapAnimationCurve: Curves.easeInOutCubic,
+            PieChartData(
+              startDegreeOffset: -90,
+              sectionsSpace: 1.5,
+              centerSpaceRadius: centerSpaceRadius,
+              borderData: FlBorderData(show: false),
+              pieTouchData: PieTouchData(
+                enabled: true,
+                touchCallback: (event, response) {
+                  if (!event.isInterestedForInteractions) {
+                    return;
+                  }
+                  final touchedIndex = response?.touchedSection?.touchedSectionIndex;
+                  if (touchedIndex != null && touchedIndex >= 0 && touchedIndex < items.length) {
+                    onSliceTap(touchedIndex);
+                  }
+                },
               ),
+              sections: items.asMap().entries.map((entry) {
+                final index = entry.key;
+                final item = entry.value;
+                final percentage = total == 0 ? 0.0 : (item.amount / total) * 100;
+                final isSelected = selectedIndex == index;
+                final itemProgress = chartProgress;
+                final showTitle =
+                    highlightedLabels.contains(item.label) && percentage >= 5 && progress > 0.84;
+                final selectionProgress = isSelected
+                    ? Curves.easeOutBack.transform(chartProgress.clamp(0.0, 1.0))
+                    : 0.0;
+                final sliceGradient = isSelected
+                    ? LinearGradient(
+                        begin: item.gradient.begin,
+                        end: item.gradient.end,
+                        colors: item.gradient.colors
+                            .map((color) => _lighten(color, 0.08 + (0.05 * selectionProgress)))
+                            .toList(),
+                        stops: item.gradient.stops,
+                      )
+                    : item.gradient;
+
+                return PieChartSectionData(
+                  value: math.max(item.amount * itemProgress, 0.001),
+                  radius: sectionRadius,
+                  title: showTitle ? '${percentage.toStringAsFixed(1)}%' : '',
+                  titlePositionPercentageOffset: 0.76,
+                  titleStyle: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Inter',
+                  ),
+                  gradient: sliceGradient,
+                  borderSide: BorderSide(
+                    color: isSelected
+                        ? _lighten(_chartDividerColor, 0.14 + (0.08 * selectionProgress))
+                        : _chartDividerColor.withValues(alpha: 0.88),
+                    width: isSelected ? 1.4 + (1.2 * selectionProgress) : 0.9,
+                  ),
+                  badgeWidget: isSelected
+                      ? _SelectionPulseBadge(
+                          color: item.color,
+                          progress: selectionProgress,
+                        )
+                      : null,
+                  badgePositionPercentageOffset: 1.16,
+                );
+              }).toList(),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SelectionPulseBadge extends StatelessWidget {
+  const _SelectionPulseBadge({
+    required this.color,
+    required this.progress,
+  });
+
+  final Color color;
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final pulse = 0.5 + 0.5 * math.sin(progress * math.pi);
+    final outerSize = 20 + (6 * progress);
+    final middleSize = 12 + (4 * progress);
+    final innerSize = 5 + (2 * progress);
+
+    return Transform.scale(
+      scale: 0.94 + (0.12 * progress),
+      child: SizedBox(
+        width: outerSize,
+        height: outerSize,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: outerSize,
+              height: outerSize,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withValues(alpha: 0.10 + (0.10 * pulse)),
+                border: Border.all(
+                  color: color.withValues(alpha: 0.22 + (0.18 * pulse)),
+                  width: 1.2,
+                ),
+              ),
+            ),
+            Container(
+              width: middleSize,
+              height: middleSize,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.24 + (0.14 * pulse)),
+                    blurRadius: 14 + (8 * pulse),
+                    spreadRadius: 1 + pulse,
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              width: innerSize,
+              height: innerSize,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color,
+              ),
+            ),
+          ],
         ),
       ),
     );

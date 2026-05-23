@@ -26,6 +26,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ];
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _occupationController = TextEditingController();
+  final TextEditingController _monthlyLimitController = TextEditingController();
   final ImagePicker _imagePicker = ImagePicker();
 
   String _selectedCurrency = AppSettings.defaultCurrency;
@@ -46,6 +47,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _nameController.dispose();
     _occupationController.dispose();
+    _monthlyLimitController.dispose();
     super.dispose();
   }
 
@@ -57,6 +59,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _monthlySpendingLimit = AppSettings.getMonthlySpendingLimit();
     _nameController.text = AppSettings.getProfileName();
     _occupationController.text = AppSettings.getProfileOccupation();
+    _monthlyLimitController.text =
+        _monthlySpendingLimit == 0 ? '' : _monthlySpendingLimit.toStringAsFixed(0);
   }
 
   Future<void> _pickDateOfBirth() async {
@@ -121,8 +125,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       occupation: _occupationController.text,
       profileImageBase64: _profileImageBase64,
     );
-    await AppSettings.setCurrency(_selectedCurrency);
-    await AppSettings.setMonthlySpendingLimit(_monthlySpendingLimit);
 
     if (!mounted) {
       return;
@@ -138,6 +140,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     FocusScope.of(context).unfocus();
 
     setState(() => _isPreferencesSaving = true);
+    _monthlySpendingLimit = double.tryParse(_monthlyLimitController.text.trim()) ?? 0.0;
     await AppSettings.setCurrency(_selectedCurrency);
     await AppSettings.setMonthlySpendingLimit(_monthlySpendingLimit);
 
@@ -176,28 +179,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return DateFormat('dd MMM yyyy').format(_selectedDob!);
   }
 
+  String _backupStatusLabel() {
+    final driveLast = AppSettings.getBackupLastSyncedAt();
+    final gmailLast = AppSettings.getGmailBackupLastSyncedAt();
+    final latest = [driveLast, gmailLast]
+        .whereType<DateTime>()
+        .fold<DateTime?>(null, (current, value) {
+      if (current == null || value.isAfter(current)) {
+        return value;
+      }
+      return current;
+    });
+
+    if (latest == null) {
+      return 'No backup yet';
+    }
+    return 'Last backup ${DateFormat('dd MMM, hh:mm a').format(latest)}';
+  }
+
+  String _connectedBackupAccount() {
+    final driveEmail = AppSettings.getBackupAccountEmail();
+    if (driveEmail.isNotEmpty) {
+      return driveEmail;
+    }
+    final gmailEmail = AppSettings.getGmailBackupEmail();
+    if (gmailEmail.isNotEmpty) {
+      return gmailEmail;
+    }
+    return 'No backup account connected';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
       backgroundColor: const Color(0xFF0D1124),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
-          _buildAccountHero(theme),
+          _buildAccountHero(),
           const SizedBox(height: 16),
-          _buildProfileSection(theme),
+          _buildProfileSection(),
           const SizedBox(height: 16),
-          _buildPreferencesSection(theme),
+          _buildPreferencesSection(),
           const SizedBox(height: 16),
-          _buildBackupSection(theme),
+          _buildBackupSection(),
         ],
       ),
     );
   }
 
-  Widget _buildAccountHero(ThemeData theme) {
+  Widget _buildAccountHero() {
     final imageBytes = _profileImageBytes;
     ImageProvider<Object>? avatarImage;
     if (imageBytes != null) {
@@ -249,7 +280,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 Text(
                   displayName,
-                  style: theme.textTheme.titleLarge?.copyWith(
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w700,
                     color: Colors.white,
                   ),
@@ -272,6 +303,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       icon: const Icon(Icons.photo_camera_back_outlined),
                       label: const Text('Profile photo'),
                     ),
+                    if (imageBytes != null)
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _profileImageBase64 = '';
+                          });
+                        },
+                        icon: const Icon(Icons.delete_outline_rounded),
+                        label: const Text('Remove photo'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _HeroInfoChip(
+                      icon: Icons.currency_exchange_rounded,
+                      label: 'Currency',
+                      value: _selectedCurrency,
+                    ),
+                    _HeroInfoChip(
+                      icon: Icons.account_balance_wallet_rounded,
+                      label: 'Budget',
+                      value: _monthlySpendingLimit == 0
+                          ? 'Not set'
+                          : AppSettings.formatCurrency(
+                              _monthlySpendingLimit,
+                              _selectedCurrency,
+                            ),
+                    ),
+                    _HeroInfoChip(
+                      icon: Icons.backup_rounded,
+                      label: 'Backup',
+                      value: _backupStatusLabel(),
+                    ),
                   ],
                 ),
               ],
@@ -282,7 +350,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildProfileSection(ThemeData theme) {
+  Widget _buildProfileSection() {
     return _SettingsCard(
       title: 'Profile',
       subtitle: 'Store the personal details you want to keep in the app.',
@@ -368,7 +436,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildPreferencesSection(ThemeData theme) {
+  Widget _buildPreferencesSection() {
     return _SettingsCard(
       title: 'Preferences',
       subtitle: 'Keep the app display choices aligned with your preferences.',
@@ -396,14 +464,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 14),
           TextFormField(
-            initialValue: _monthlySpendingLimit == 0
-                ? ''
-                : _monthlySpendingLimit.toString(),
+            controller: _monthlyLimitController,
             decoration: const InputDecoration(
               labelText: 'Monthly Spending Limit',
               prefixIcon: Icon(Icons.account_balance_wallet_rounded),
+              helperText:
+                  'Used for budget progress on Home and Reports.',
             ),
-            keyboardType: TextInputType.number,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             onChanged: (value) {
               final limit = double.tryParse(value) ?? 0.0;
               setState(() => _monthlySpendingLimit = limit);
@@ -430,7 +498,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildBackupSection(ThemeData theme) {
+  Widget _buildBackupSection() {
+    final driveLastSync = AppSettings.getBackupLastSyncedAt();
+    final gmailLastSync = AppSettings.getGmailBackupLastSyncedAt();
+    final driveAccount = AppSettings.getBackupAccountEmail();
+    final gmailAccount = AppSettings.getGmailBackupEmail();
+
     return _SettingsCard(
       title: 'Backup & Restore',
       subtitle: 'Secure your data with Gmail and Google Drive',
@@ -439,7 +512,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ListTile(
             leading: const Icon(Icons.backup_rounded),
             title: const Text('Back Up Data'),
-            subtitle: const Text('Gmail and Google Drive backup'),
+            subtitle: Text(
+              driveLastSync == null && gmailLastSync == null
+                  ? 'Gmail and Google Drive backup'
+                  : 'Latest backup: ${_backupStatusLabel().replaceFirst('Last backup ', '')}',
+            ),
             trailing: const Icon(Icons.arrow_forward_ios, size: 14),
             onTap: () {
               Navigator.pushNamed(context, '/backup');
@@ -449,7 +526,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ListTile(
             leading: const Icon(Icons.restore_rounded),
             title: const Text('Restore Data'),
-            subtitle: const Text('Restore from backup'),
+            subtitle: Text(
+              _connectedBackupAccount(),
+            ),
             trailing: const Icon(Icons.arrow_forward_ios, size: 14),
             onTap: () {
               Navigator.pushNamed(context, '/restore');
@@ -459,7 +538,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ListTile(
             leading: const Icon(Icons.schedule_rounded),
             title: const Text('Backup Settings'),
-            subtitle: const Text('Schedule automatic backups'),
+            subtitle: Text(
+              driveAccount.isNotEmpty || gmailAccount.isNotEmpty
+                  ? 'Manage schedule and connected accounts'
+                  : 'Schedule automatic backups',
+            ),
             trailing: const Icon(Icons.arrow_forward_ios, size: 14),
             onTap: () {
               Navigator.pushNamed(context, '/backup-settings');
@@ -511,6 +594,60 @@ class _SettingsCard extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           child,
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroInfoChip extends StatelessWidget {
+  const _HeroInfoChip({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white70, size: 15),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white60,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

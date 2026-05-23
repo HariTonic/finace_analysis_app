@@ -741,22 +741,15 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       _subCategoriesByCategory[_category] ?? const ['Others'];
 
   Future<void> _pickDate() async {
-    final picked = await showDatePicker(
+    final picked = await showDialog<DateTime>(
       context: context,
-      initialDate: _date,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2101),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF8790FF),
-              surface: Color(0xFF1E1E1E),
-            ),
-            dialogTheme:
-                const DialogThemeData(backgroundColor: Color(0xFF1A1A1A)),
-          ),
-          child: child!,
+      builder: (context) {
+        return _ExpenseCalendarDialog(
+          initialDate: _date,
+          firstDate: DateTime(2000),
+          lastDate: DateTime(2101),
+          hasExpenseForDate: _hasExpenseForDate,
+          today: DateTime.now(),
         );
       },
     );
@@ -879,6 +872,295 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         _subCategory = 'Others';
       }
     }
+  }
+}
+
+class _ExpenseCalendarDialog extends StatefulWidget {
+  const _ExpenseCalendarDialog({
+    required this.initialDate,
+    required this.firstDate,
+    required this.lastDate,
+    required this.hasExpenseForDate,
+    required this.today,
+  });
+
+  final DateTime initialDate;
+  final DateTime firstDate;
+  final DateTime lastDate;
+  final bool Function(DateTime date) hasExpenseForDate;
+  final DateTime today;
+
+  @override
+  State<_ExpenseCalendarDialog> createState() => _ExpenseCalendarDialogState();
+}
+
+class _ExpenseCalendarDialogState extends State<_ExpenseCalendarDialog> {
+  late DateTime _visibleMonth;
+  late DateTime _selectedDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDate = DateTime(
+      widget.initialDate.year,
+      widget.initialDate.month,
+      widget.initialDate.day,
+    );
+    _visibleMonth = DateTime(_selectedDate.year, _selectedDate.month);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final firstMonth = DateTime(widget.firstDate.year, widget.firstDate.month);
+    final lastMonth = DateTime(widget.lastDate.year, widget.lastDate.month);
+    final canGoPrev = !_visibleMonth.isAtSameMomentAs(firstMonth);
+    final canGoNext = !_visibleMonth.isAtSameMomentAs(lastMonth);
+
+    return Dialog(
+      backgroundColor: const Color(0xFF141A2F),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Select Date',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: canGoPrev ? () => _changeMonth(-1) : null,
+                  icon: const Icon(Icons.chevron_left_rounded),
+                  color: Colors.white,
+                ),
+                Text(
+                  DateFormat('MMMM yyyy').format(_visibleMonth),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                IconButton(
+                  onPressed: canGoNext ? () => _changeMonth(1) : null,
+                  icon: const Icon(Icons.chevron_right_rounded),
+                  color: Colors.white,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            _buildWeekdayHeader(),
+            const SizedBox(height: 10),
+            _buildCalendarGrid(),
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10182E),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Row(
+                children: [
+                  _CalendarLegendDot(color: Color(0xFFEE6A62)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Red highlight means no expense was entered on that past day.',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context, _selectedDate),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF7A85FF),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: const Text('Use Date'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWeekdayHeader() {
+    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return Row(
+      children: weekdays
+          .map(
+            (day) => Expanded(
+              child: Center(
+                child: Text(
+                  day,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.6),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Widget _buildCalendarGrid() {
+    final firstOfMonth = DateTime(_visibleMonth.year, _visibleMonth.month, 1);
+    final daysInMonth =
+        DateUtils.getDaysInMonth(_visibleMonth.year, _visibleMonth.month);
+    final leadingEmpty = (firstOfMonth.weekday + 6) % 7;
+    final totalCells = leadingEmpty + daysInMonth;
+    final trailingEmpty = (7 - (totalCells % 7)) % 7;
+    final cellCount = totalCells + trailingEmpty;
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: cellCount,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 7,
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+      ),
+      itemBuilder: (context, index) {
+        if (index < leadingEmpty || index >= leadingEmpty + daysInMonth) {
+          return const SizedBox.shrink();
+        }
+
+        final day = index - leadingEmpty + 1;
+        final date = DateTime(_visibleMonth.year, _visibleMonth.month, day);
+        final today = DateTime(
+          widget.today.year,
+          widget.today.month,
+          widget.today.day,
+        );
+        final isSelected = _isSameDay(date, _selectedDate);
+        final isToday = _isSameDay(date, today);
+        final isMissed =
+            date.isBefore(today) && !widget.hasExpenseForDate(date);
+        final isFuture = date.isAfter(today);
+
+        Color backgroundColor = Colors.transparent;
+        Color textColor = Colors.white;
+        BoxBorder? border;
+
+        if (isSelected) {
+          backgroundColor = const Color(0xFF7A85FF);
+          border = Border.all(color: const Color(0xFFB9BFFF), width: 1.5);
+        } else if (isMissed) {
+          backgroundColor = const Color(0xFF3A171D);
+          border = Border.all(color: const Color(0xFFEE6A62), width: 1.2);
+          textColor = const Color(0xFFFFC3BD);
+        } else if (isToday) {
+          backgroundColor = const Color(0xFF18233F);
+          border = Border.all(color: const Color(0xFF7A85FF), width: 1.1);
+        } else if (isFuture) {
+          textColor = Colors.white.withValues(alpha: 0.45);
+        }
+
+        return InkWell(
+          onTap: () => setState(() => _selectedDate = date),
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(14),
+              border: border,
+            ),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Text(
+                  '$day',
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 14,
+                    fontWeight: isSelected || isToday || isMissed
+                        ? FontWeight.w700
+                        : FontWeight.w500,
+                  ),
+                ),
+                if (isMissed && !isSelected)
+                  Positioned(
+                    bottom: 5,
+                    child: Container(
+                      width: 5,
+                      height: 5,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFEE6A62),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _changeMonth(int offset) {
+    setState(() {
+      _visibleMonth =
+          DateTime(_visibleMonth.year, _visibleMonth.month + offset, 1);
+    });
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+class _CalendarLegendDot extends StatelessWidget {
+  const _CalendarLegendDot({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+      ),
+    );
   }
 }
 

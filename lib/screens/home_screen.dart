@@ -55,6 +55,14 @@ class _HomeScreenState extends State<HomeScreen> {
             final monthlyExpense = currentMonthTransactions
                 .where((t) => t.type == 'expense')
                 .fold(0.0, (sum, t) => sum + t.amount);
+            final monthlyIncome = currentMonthTransactions
+                .where((t) => t.type == 'income')
+                .fold(0.0, (sum, t) => sum + t.amount);
+            final monthlyInvestment = currentMonthTransactions
+                .where((t) => t.type == 'investment')
+                .fold(0.0, (sum, t) => sum + t.amount);
+            final monthlyInHand =
+                monthlyIncome - monthlyExpense - monthlyInvestment;
             final monthlyLimit = AppSettings.getMonthlySpendingLimit();
 
             // Progress bar: shows remaining budget (decreases as spending increases)
@@ -91,21 +99,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   transaction.date.day == now.day;
             }).toList()
               ..sort((a, b) => b.date.compareTo(a.date));
-            final todayIncome = recentTransactions
-                .where((t) => t.type == 'income')
-                .fold(0.0, (sum, t) => sum + t.amount);
             final todayExpense = recentTransactions
                 .where((t) => t.type == 'expense')
+                .fold(0.0, (sum, t) => sum + t.amount);
+            final todayIncome = recentTransactions
+                .where((t) => t.type == 'income')
                 .fold(0.0, (sum, t) => sum + t.amount);
             final todayInvestment = recentTransactions
                 .where((t) => t.type == 'investment')
                 .fold(0.0, (sum, t) => sum + t.amount);
             final todayNet = todayIncome - todayExpense - todayInvestment;
-            final dailyBudget = monthlyLimit > 0 ? monthlyLimit / DateUtils.getDaysInMonth(now.year, now.month) : 0.0;
-            final dailyBudgetProgress = dailyBudget > 0
-                ? (todayExpense / dailyBudget).clamp(0.0, 1.6)
-                : 0.0;
-
             final installDate = AppSettings.getInstallDate();
             final latestEntryDate = transactions.isNotEmpty
                 ? transactions
@@ -323,73 +326,31 @@ class _HomeScreenState extends State<HomeScreen> {
                               children: [
                                 Expanded(
                                   child: _todayMiniStat(
-                                    'Income',
-                                    formatAmount(todayIncome),
-                                    const Color(0xFF10B981),
-                                    Icons.south_west_rounded,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: _todayMiniStat(
                                     'Expense',
                                     formatAmount(todayExpense),
                                     const Color(0xFFEF4444),
-                                    Icons.north_east_rounded,
+                                    Icons.receipt_long_rounded,
                                   ),
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: _todayMiniStat(
-                                    'Invest',
-                                    formatAmount(todayInvestment),
-                                    const Color(0xFF3B82F6),
-                                    Icons.show_chart_rounded,
+                                    'Entries',
+                                    recentTransactions.length.toString(),
+                                    const Color(0xFF38BDF8),
+                                    Icons.format_list_bulleted_rounded,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _todayMiniStat(
+                                    'Pending',
+                                    pendingDays <= 0 ? 'None' : pendingLabel,
+                                    const Color(0xFFF59E0B),
+                                    Icons.schedule_rounded,
                                   ),
                                 ),
                               ],
-                            ),
-                            const SizedBox(height: 18),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  dailyBudget > 0 ? 'Today budget' : 'Today spending',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.75),
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                Text(
-                                  dailyBudget > 0
-                                      ? '${formatAmount(todayExpense)} / ${formatAmount(dailyBudget)}'
-                                      : formatAmount(todayExpense),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(999),
-                              child: LinearProgressIndicator(
-                                value: dailyBudget > 0 ? dailyBudgetProgress.clamp(0.0, 1.0) : 0,
-                                minHeight: 10,
-                                backgroundColor: Colors.white.withValues(alpha: 0.08),
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  dailyBudget <= 0
-                                      ? const Color(0xFF64748B)
-                                      : dailyBudgetProgress < 0.7
-                                          ? const Color(0xFF10B981)
-                                          : dailyBudgetProgress < 1
-                                              ? const Color(0xFFF59E0B)
-                                              : const Color(0xFFEF4444),
-                                ),
-                              ),
                             ),
                             const SizedBox(height: 18),
                             SizedBox(
@@ -424,6 +385,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 16),
                       _buildToolsCard(context),
                       const SizedBox(height: 24),
+                      _buildMonthlyOverviewCard(
+                        income: monthlyIncome,
+                        invested: monthlyInvestment,
+                        inHand: monthlyInHand,
+                        formatAmount: formatAmount,
+                      ),
+                      const SizedBox(height: 24),
                       const Text('Today\'s Transactions',
                           style: TextStyle(
                               fontSize: 20, fontWeight: FontWeight.bold)),
@@ -442,38 +410,62 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildActionCard(
-      BuildContext context, IconData icon, String label, String? route) {
-    return GestureDetector(
-      onTap: route == null ? null : () => Navigator.pushNamed(context, route),
-      child: Container(
-        height: 100,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF161626),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2A2A3F),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: Colors.white, size: 20),
+      BuildContext context,
+      IconData icon,
+      String label,
+      String? route,
+      Color accent,
+    ) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: route == null ? null : () => Navigator.pushNamed(context, route),
+        borderRadius: BorderRadius.circular(22),
+        child: Ink(
+          height: 108,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                accent.withValues(alpha: 0.95),
+                accent.withValues(alpha: 0.72),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
+            borderRadius: BorderRadius.circular(22),
+            boxShadow: [
+              BoxShadow(
+                color: accent.withValues(alpha: 0.26),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
               ),
-            ),
-          ],
+            ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: Colors.white, size: 22),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -485,27 +477,30 @@ class _HomeScreenState extends State<HomeScreen> {
         Expanded(
           child: _buildActionCard(
             context,
-            Icons.wallet,
+            Icons.remove_circle_outline_rounded,
             'Add Expense',
             '/add-expense',
+            const Color(0xFFE35D5B),
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: _buildActionCard(
             context,
-            Icons.attach_money,
+            Icons.add_card_rounded,
             'Add Income',
             '/add-income',
+            const Color(0xFF1FA971),
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: _buildActionCard(
             context,
-            Icons.show_chart,
+            Icons.trending_up_rounded,
             'Add Investment',
             '/add-investment',
+            const Color(0xFF3E7BFA),
           ),
         ),
       ],
@@ -579,6 +574,78 @@ class _HomeScreenState extends State<HomeScreen> {
               'Import SMS',
               style: TextStyle(fontWeight: FontWeight.w700),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMonthlyOverviewCard({
+    required double income,
+    required double invested,
+    required double inHand,
+    required String Function(double value) formatAmount,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF161626),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'This Month',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Track your monthly income, invested amount, and in-hand balance.',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.68),
+              fontSize: 12,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: _todayMiniStat(
+                  'Income',
+                  formatAmount(income),
+                  const Color(0xFF10B981),
+                  Icons.add_card_rounded,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _todayMiniStat(
+                  'Invested',
+                  formatAmount(invested),
+                  const Color(0xFF3B82F6),
+                  Icons.trending_up_rounded,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _todayMiniStat(
+                  'In Hand',
+                  formatAmount(inHand),
+                  inHand >= 0
+                      ? const Color(0xFF8B5CF6)
+                      : const Color(0xFFEF4444),
+                  Icons.account_balance_wallet_rounded,
+                ),
+              ),
+            ],
           ),
         ],
       ),
