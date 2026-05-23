@@ -236,7 +236,7 @@ class _BackupScreenState extends State<BackupScreen>
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Automatic backups available with settings',
+                        'Auto backup runs after changes when Drive backup is enabled',
                         style: TextStyle(fontSize: 13, color: Colors.white70),
                       ),
                     ),
@@ -327,7 +327,7 @@ class _BackupScreenState extends State<BackupScreen>
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Schedule automatic daily backups',
+                        'Set a daily, weekly, or monthly Gmail backup interval',
                         style: TextStyle(fontSize: 13, color: Colors.white70),
                       ),
                     ),

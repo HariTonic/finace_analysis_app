@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../utils/app_settings.dart';
 import '../utils/gmail_backup_service.dart';
 
@@ -24,13 +25,28 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     _selectedFrequency = BackupFrequency.fromString(frequencyValue);
   }
 
+  String _scheduledBackupStatus() {
+    final lastRun = AppSettings.getGmailBackupLastSyncedAt();
+    if (_selectedFrequency == BackupFrequency.never) {
+      return 'Automatic Gmail backup is turned off.';
+    }
+    if (lastRun == null) {
+      return 'No scheduled Gmail backup has run yet.';
+    }
+    return 'Last scheduled Gmail backup: ${DateFormat('dd MMM yyyy, hh:mm a').format(lastRun)}';
+  }
+
   Future<void> _setBackupFrequency(BackupFrequency frequency) async {
     setState(() {
       _selectedFrequency = frequency;
     });
 
-    await AppSettings.setGmailBackupFrequency(frequency.value);
-    _showMessage('Backup frequency set to ${frequency.displayName}');
+    await GmailBackupService.instance.scheduleAutomaticBackup(frequency);
+    _showMessage(
+      frequency == BackupFrequency.never
+          ? 'Automatic Gmail backup disabled'
+          : 'Gmail backup will run ${frequency.displayName.toLowerCase()} when the app is opened.',
+    );
   }
 
   void _showMessage(String message) {
@@ -127,6 +143,40 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
               ),
             ),
             const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1B1B2E),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.schedule_rounded,
+                      size: 18,
+                      color: Color(0xFF7A85FF),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _scheduledBackupStatus(),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.white70,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
             _buildFrequencyOption(
               BackupFrequency.never,
               'Never',
@@ -135,17 +185,17 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
             _buildFrequencyOption(
               BackupFrequency.daily,
               'Daily',
-              'Automatic backup every day at 2:00 AM',
+              'Runs once per day when you open the app',
             ),
             _buildFrequencyOption(
               BackupFrequency.weekly,
               'Weekly',
-              'Automatic backup every Sunday at 2:00 AM',
+              'Runs once per week when you open the app',
             ),
             _buildFrequencyOption(
               BackupFrequency.monthly,
               'Monthly',
-              'Automatic backup on the 1st of each month',
+              'Runs once per month when you open the app',
             ),
             const SizedBox(height: 24),
 

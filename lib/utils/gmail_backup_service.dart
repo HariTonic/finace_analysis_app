@@ -279,6 +279,54 @@ This is an automated backup. Do not reply to this email.
     await AppSettings.setGmailBackupFrequency(frequency.value);
   }
 
+  Future<bool> runScheduledBackupIfDue() async {
+    final frequency = BackupFrequency.fromString(
+      AppSettings.getGmailBackupFrequency(),
+    );
+    if (frequency == BackupFrequency.never) {
+      return false;
+    }
+
+    final backupEmail = AppSettings.getGmailBackupEmail();
+    if (backupEmail.isEmpty) {
+      return false;
+    }
+
+    final lastSyncedAt = AppSettings.getGmailBackupLastSyncedAt();
+    if (!_isBackupDue(frequency, lastSyncedAt, DateTime.now())) {
+      return false;
+    }
+
+    return sendBackupToGmail();
+  }
+
+  bool _isBackupDue(
+    BackupFrequency frequency,
+    DateTime? lastSyncedAt,
+    DateTime now,
+  ) {
+    if (lastSyncedAt == null) {
+      return true;
+    }
+
+    final today = DateTime(now.year, now.month, now.day);
+    final lastDay = DateTime(
+      lastSyncedAt.year,
+      lastSyncedAt.month,
+      lastSyncedAt.day,
+    );
+
+    return switch (frequency) {
+      BackupFrequency.never => false,
+      BackupFrequency.daily => lastDay.isBefore(today),
+      BackupFrequency.weekly => lastDay.isBefore(
+          today.subtract(Duration(days: today.weekday - 1)),
+        ),
+      BackupFrequency.monthly =>
+        lastDay.year != today.year || lastDay.month != today.month,
+    };
+  }
+
   /// Prepare backup data (reuse existing logic)
   Future<Map<String, dynamic>> _prepareBackupData() async {
     final transactions =

@@ -9,7 +9,6 @@ import '../models/investment_holding.dart';
 import '../models/transaction.dart';
 import '../utils/app_settings.dart';
 import '../utils/backup_sync_service.dart';
-import '../utils/notification_service.dart';
 import '../widgets/running_text.dart';
 import '../widgets/scroll_shadow_wrapper.dart';
 
@@ -81,18 +80,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ? [Colors.amber[400]!, Colors.orange[600]!]
                     : [Colors.red[400]!, Colors.red[700]!];
 
-            // Check for notifications
-            if (monthlyLimit > 0) {
-              final spentPercentage = (monthlyExpense / monthlyLimit) * 100;
-              if (spentPercentage >= 25 && spentPercentage < 50) {
-                // Notify at 25%
-                NotificationService.showSpendingNotification(25);
-              } else if (spentPercentage >= 50 && spentPercentage < 75) {
-                NotificationService.showSpendingNotification(50);
-              } else if (spentPercentage >= 75 && spentPercentage < 100) {
-                NotificationService.showSpendingNotification(75);
-              }
-            }
             final recentTransactions = transactions.where((transaction) {
               return transaction.date.year == now.year &&
                   transaction.date.month == now.month &&
@@ -122,6 +109,9 @@ class _HomeScreenState extends State<HomeScreen> {
             final pendingLabel = pendingDays <= 0
                 ? 'All caught up'
                 : '$pendingDays day${pendingDays == 1 ? '' : 's'} pending';
+            final pendingStatText = pendingDays <= 0
+                ? 'None'
+                : '$pendingDays day${pendingDays == 1 ? '' : 's'}';
             final headerDate =
                 '${now.month.toString().padLeft(2, '0')}/${now.day.toString().padLeft(2, '0')}/${now.year}';
 
@@ -345,7 +335,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Expanded(
                                   child: _todayMiniStat(
                                     'Pending',
-                                    pendingDays <= 0 ? 'None' : pendingLabel,
+                                    pendingStatText,
                                     const Color(0xFFF59E0B),
                                     Icons.schedule_rounded,
                                   ),
@@ -716,6 +706,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _todayMiniStat(String label, String value, Color accent, IconData icon) {
     return Container(
+      height: 116,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.05),
@@ -736,6 +727,8 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 12),
           Text(
             label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.68),
               fontSize: 11,
@@ -743,12 +736,19 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 6),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             ),
           ),
         ],

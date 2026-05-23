@@ -5,6 +5,7 @@ import 'utils/app_settings.dart';
 import 'utils/notification_service.dart';
 import 'utils/import_history.dart';
 import 'utils/data_seeder.dart';
+import 'utils/gmail_backup_service.dart';
 import 'models/transaction.dart';
 import 'models/investment_holding.dart';
 import 'screens/splash_screen.dart';
@@ -44,8 +45,38 @@ void main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  AppLifecycleListener? _appLifecycleListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _runScheduledBackups();
+    _appLifecycleListener = AppLifecycleListener(
+      onResume: _runScheduledBackups,
+    );
+  }
+
+  Future<void> _runScheduledBackups() async {
+    try {
+      await GmailBackupService.instance.runScheduledBackupIfDue();
+    } catch (_) {
+      // Keep scheduled backup checks non-blocking.
+    }
+  }
+
+  @override
+  void dispose() {
+    _appLifecycleListener?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
